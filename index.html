@@ -1,0 +1,3715 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monet · Quand la lumière devient art</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Une exposition numérique sur la poésie de la lumière, d'après Claude Monet.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500&family=Italiana&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap">
+<style>
+/* Layout concept: a fixed, living pond rendered in WebGL sits beneath the whole page.
+   Chapters scroll over it like sheets of tinted glass; the first three let the water show
+   through, the last two are paper and ink. Chrome is a thin frame at the edges of the canvas. */
+:root {
+  --ink: #202720;          /* dark ink */
+  --botanical: #243b32;    /* deep botanical green */
+  --water: #a8c8cc;        /* water blue */
+  --mist: #f1f0e8;         /* mist white */
+  --sage: #a5b3a0;         /* muted sage */
+  --lilac: #c5c0d6;        /* soft lilac */
+  --sun: #e8c78b;          /* warm sunlight */
+  --ink-soft: #2c352d;
+  --ink-line: rgba(241, 240, 232, .18);
+  --paper-line: rgba(32, 39, 32, .16);
+  --ui: var(--mist);       /* chrome colour, retuned per chapter */
+  --ui-dim: rgba(241, 240, 232, .62);
+  --chapter: var(--water); /* chapter colour, used by the tide line */
+
+  --f-display: "Italiana", "Didot", "Bodoni 72", "Times New Roman", serif;
+  --f-serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --f-sans: "Hanken Grotesk", "Helvetica Neue", Arial, system-ui, sans-serif;
+
+  --s-1: clamp(.72rem, .69rem + .1vw, .78rem);
+  --s0: clamp(.95rem, .9rem + .2vw, 1.05rem);
+  --s1: clamp(1.15rem, 1.05rem + .45vw, 1.4rem);
+  --s2: clamp(1.5rem, 1.2rem + 1.3vw, 2.3rem);
+  --s3: clamp(2.3rem, 1.6rem + 3vw, 4.4rem);
+  --s4: clamp(3.4rem, 2rem + 7vw, 9rem);
+  --s5: clamp(2.8rem, .4rem + 13.5vw, 17rem);
+
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  --ease-water: cubic-bezier(.22, .61, .2, 1);
+  --ease-light: cubic-bezier(.65, 0, .35, 1);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--ink); scroll-behavior: smooth; overflow-x: clip; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--mist);
+  font-family: var(--f-sans);
+  font-size: var(--s0);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+body.veiled { overflow: hidden; }
+body.veiled main { opacity: 0; visibility: hidden; }
+main { transition: opacity 1.4s .5s var(--ease-water); }
+img { max-width: 100%; display: block; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; }
+:focus:not(:focus-visible) { outline: none; }
+:focus-visible { outline: 1.5px solid var(--sun); outline-offset: 4px; border-radius: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.label {
+  font-family: var(--f-sans);
+  font-size: var(--s-1);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- The pond (fixed WebGL layer) ---------- */
+#pond-canvas, #pond-fallback {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: 0; display: block;
+}
+#pond-fallback {
+  background:
+    radial-gradient(60% 40% at 70% 30%, var(--fb-light, #f3eedc) 0%, transparent 60%),
+    radial-gradient(30% 14% at 25% 70%, var(--fb-pad, #6f8a6a) 0%, transparent 70%),
+    radial-gradient(26% 10% at 70% 80%, var(--fb-pad, #6f8a6a) 0%, transparent 70%),
+    linear-gradient(180deg, var(--fb-sky, #c5c0d6), var(--fb-water, #8fb2b4));
+  transition: background 1.2s var(--ease-light);
+}
+.grain {
+  position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  opacity: .07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- Chrome ---------- */
+.chrome {
+  position: fixed; z-index: 30; left: 0; right: 0; top: 0;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+  padding-left: calc(var(--gutter) + 8px);
+  padding-right: calc(var(--gutter-r) + 8px);
+  color: var(--ui);
+  pointer-events: none;
+  text-shadow: 0 1px 14px var(--ui-shadow, rgba(20,30,25,.5));
+  transition: color .8s var(--ease-light), opacity .8s var(--ease-light);
+}
+.chrome svg, .tide i { filter: drop-shadow(0 1px 6px var(--ui-shadow, rgba(20,30,25,.5))); }
+.locator { text-shadow: 0 1px 14px var(--ui-shadow, rgba(20,30,25,.5)); }
+.chrome > * { pointer-events: auto; }
+.wordmark { display: grid; gap: 2px; text-align: left; }
+.wordmark b { font-family: var(--f-display); font-weight: 400; font-size: 1.55rem; letter-spacing: .32em; line-height: 1; }
+.wordmark span { color: var(--ui-dim); font-size: .64rem; letter-spacing: .24em; }
+.chrome-tools { display: flex; gap: 6px; align-items: center; }
+.tool {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 10px; min-height: 40px;
+  color: var(--ui);
+  font-size: .68rem; letter-spacing: .2em; text-transform: uppercase; font-weight: 500;
+  transition: opacity .3s;
+}
+.tool:hover { opacity: .7; }
+.tool svg { width: 18px; height: 18px; flex: none; }
+.tool[aria-pressed="true"] .dot-on { opacity: 1; }
+.dot-on { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .25; transition: opacity .3s; }
+
+/* Tide line: chapter navigation, each stop carries its chapter's colour */
+.tide {
+  position: fixed; z-index: 30;
+  left: calc(var(--gutter) + 14px);
+  top: 50%; transform: translateY(-50%);
+  color: var(--ui);
+  transition: color .8s var(--ease-light), opacity .8s;
+}
+.tide ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; position: relative; }
+.tide ol::before { content: ""; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 1px; background: currentColor; opacity: .25; }
+.tide a { display: flex; align-items: center; gap: 14px; text-decoration: none; min-height: 18px; }
+.tide i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(0,0,0,.18); transform: scale(.6); transition: transform .5s var(--ease-water); flex: none; }
+.tide span { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; opacity: 0; transform: translateX(-6px); transition: opacity .4s, transform .4s var(--ease-water); white-space: nowrap; }
+.tide a[aria-current="true"] i { transform: scale(1.25); }
+.tide:hover span, .tide a:focus-visible span { opacity: 1; transform: none; }
+
+.locator {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 22px);
+  color: var(--ui); text-align: center; display: grid; gap: 0; pointer-events: none;
+  transition: color .8s var(--ease-light), opacity .8s;
+}
+.locator .n { color: var(--ui-dim); }
+.locator .t { font-family: var(--f-serif); font-style: italic; font-size: 1.05rem; letter-spacing: 0; text-transform: none; }
+
+body.veiled .chrome, body.veiled .tide, body.veiled .locator { opacity: 0; pointer-events: none; }
+body.quiet .chrome, body.quiet .tide, body.quiet .locator, body.quiet .pond-copy, body.quiet .lab-panel { opacity: 0 !important; pointer-events: none !important; }
+
+/* ---------- The veil (entrance) ---------- */
+.veil {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  padding-left: var(--gutter); padding-right: var(--gutter-r);
+  padding-block: 24px;
+  color: var(--ink);
+  text-align: center;
+}
+.veil[hidden] { display: none !important; }
+.veil-inner { display: grid; gap: clamp(14px, 2.4vh, 26px); justify-items: center; }
+.veil h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: var(--s5); line-height: .82; letter-spacing: .14em; margin-right: -.14em; color: var(--botanical); }
+.veil h1 span { display: inline-block; opacity: 0; filter: blur(14px); transform: translateY(.12em); animation: rise 2.2s var(--ease-water) forwards; }
+.veil .sub { font-size: clamp(.72rem, .6rem + .4vw, .95rem); letter-spacing: .5em; margin-right: -.5em; text-transform: uppercase; color: var(--botanical); opacity: 0; animation: fadein 1.6s .9s forwards; }
+.veil .line { font-family: var(--f-serif); font-style: italic; font-size: var(--s1); color: #3c4a40; max-width: 30ch; opacity: 0; animation: fadein 1.6s 1.3s forwards; }
+.veil-actions { display: flex; gap: 22px; align-items: center; opacity: 0; animation: fadein 1.2s .6s forwards; margin-top: 8px; }
+.enter {
+  position: relative; width: 108px; height: 108px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: .7rem; letter-spacing: .3em; text-transform: uppercase; font-weight: 500; color: var(--botanical);
+}
+.enter::before, .enter::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(36, 59, 50, .55); }
+.enter::after { animation: ring 3.6s var(--ease-water) infinite; }
+.enter:hover::before { background: rgba(255,255,255,.18); }
+.skip { font-size: .66rem; letter-spacing: .24em; text-transform: uppercase; color: #3c4a40; padding: 10px; border-bottom: 1px solid rgba(36,59,50,.3); }
+.veil.leaving h1 span { animation: sink 1.3s var(--ease-water) forwards; }
+.veil.leaving .sub, .veil.leaving .line, .veil.leaving .veil-actions { animation: fadeout .6s forwards; }
+
+@keyframes rise { to { opacity: 1; filter: blur(0); transform: none; } }
+@keyframes sink { from { opacity: 1; filter: blur(0); } to { opacity: 0; filter: blur(22px); transform: translateY(.3em) scaleY(1.4); } }
+@keyframes fadein { to { opacity: 1; } }
+@keyframes fadeout { to { opacity: 0; } }
+@keyframes ring { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
+
+/* ---------- Chapters ---------- */
+main { position: relative; z-index: 10; }
+.chapter {
+  position: relative;
+  padding-left: calc(var(--gutter) + clamp(0px, 6vw, 110px));
+  padding-right: var(--gutter-r);
+}
+.eyebrow { display: flex; gap: 14px; align-items: baseline; color: var(--ui-dim); }
+.eyebrow b { font-weight: 500; color: var(--ui); }
+
+/* Prologue: the living painting */
+#pond { min-height: 100svh; display: grid; align-items: end; padding-block: 120px 56px; }
+.pond-copy { position: relative; display: grid; gap: 18px; max-width: 34rem; transition: opacity .8s; text-shadow: 0 1px 24px rgba(20, 30, 25, .45); }
+.pond-copy::before, .lab-head::before, .lab-panel::before { content: ""; position: absolute; inset: -18% 0 -22% -10%; z-index: -1; background: radial-gradient(closest-side, rgba(24,34,28,.38), transparent); pointer-events: none; }
+.lab-head, .lab-panel { position: relative; }
+#pond, #lab { overflow: clip; }
+.pond-copy h2 { margin: 0; font-family: var(--f-serif); font-weight: 300; font-style: italic; font-size: var(--s3); line-height: 1; letter-spacing: -.01em; text-wrap: balance; }
+.pond-copy p { margin: 0; color: rgba(241,240,232,.85); max-width: 40ch; }
+.pond-actions { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.textbtn { padding: 10px 0; border-bottom: 1px solid currentColor; font-size: .7rem; letter-spacing: .22em; text-transform: uppercase; font-weight: 500; }
+.textbtn:hover { opacity: .7; }
+.hint { color: rgba(241,240,232,.7); font-size: .78rem; }
+
+/* Laboratory */
+#lab { min-height: 112svh; display: grid; align-content: space-between; padding-block: 120px 48px; }
+.lab-head { display: grid; gap: 14px; max-width: 46rem; text-shadow: 0 1px 30px rgba(20, 30, 25, .35); }
+.lab-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(2.5rem, 1.2rem + 4.8vw, 6.6rem); line-height: .95; letter-spacing: .04em; text-wrap: balance; }
+.lab-head p { margin: 0; font-family: var(--f-serif); font-style: italic; font-size: var(--s1); }
+.lab-panel { display: grid; gap: 18px; margin-top: 30vh; transition: opacity .8s; max-width: 980px; }
+.lab-reading { display: flex; flex-wrap: wrap; gap: 6px 26px; align-items: baseline; }
+.lab-reading output { font-family: var(--f-serif); font-size: var(--s2); font-style: italic; line-height: 1.1; min-width: 9ch; }
+.lab-reading .meta { color: rgba(241,240,232,.75); }
+.horizon { position: relative; padding-top: 34px; }
+.stops { display: flex; justify-content: space-between; gap: 6px; position: absolute; top: 0; left: 0; right: 0; }
+.stops button {
+  font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 500;
+  color: rgba(241,240,232,.62); padding: 4px 0; transition: color .3s; white-space: nowrap;
+}
+.stops button[aria-pressed="true"], .stops button:hover { color: var(--mist); }
+.horizon input[type="range"] { width: 100%; margin: 0; height: 36px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.horizon input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: linear-gradient(90deg, #c5c0d6, #f3eedc 25%, #e8c78b 50%, #7d86b0 75%, #2e3b55); }
+.horizon input[type="range"]::-moz-range-track { height: 1px; background: linear-gradient(90deg, #c5c0d6, #f3eedc 25%, #e8c78b 50%, #7d86b0 75%, #2e3b55); }
+.horizon input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%; margin-top: -13px; background: var(--knob, #f3eedc); box-shadow: 0 0 0 6px rgba(241,240,232,.12), 0 0 34px 6px var(--knob, #f3eedc); border: 0; }
+.horizon input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%; background: var(--knob, #f3eedc); box-shadow: 0 0 0 6px rgba(241,240,232,.12), 0 0 34px 6px var(--knob, #f3eedc); border: 0; }
+.lab-note { color: rgba(241,240,232,.62); font-size: .78rem; max-width: 62ch; margin: 0; }
+
+/* World I — Water */
+#water {
+  padding-block: 18vh 16vh;
+  background: linear-gradient(180deg, rgba(36,59,50,0) 0%, rgba(36,59,50,.6) 14%, rgba(30,48,41,.72) 55%, var(--botanical) 100%);
+}
+.world-head { display: grid; gap: 14px; max-width: 60rem; margin-bottom: clamp(48px, 10vh, 110px); }
+.world-head h2 { margin: 0 0 .06em; font-family: var(--f-display); font-weight: 400; font-size: var(--s5); line-height: .9; letter-spacing: .04em; }
+.world-head p { margin: 0; font-family: var(--f-serif); font-size: var(--s1); max-width: 34ch; line-height: 1.4; }
+.world-head .lede-note { font-family: var(--f-sans); font-size: var(--s0); max-width: 52ch; color: rgba(241,240,232,.76); }
+
+.lilies {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(28px, 5vw, 70px) clamp(14px, 2.4vw, 36px);
+  max-width: 1400px;
+  align-items: start;
+}
+.lily { grid-column: span 12; position: relative; display: grid; gap: 14px; text-align: left; }
+.lily:nth-child(1) { grid-column: 1 / span 7; }
+.lily:nth-child(2) { grid-column: 9 / span 4; margin-top: 18vh; }
+.lily:nth-child(3) { grid-column: 2 / span 5; }
+.lily:nth-child(4) { grid-column: 6 / span 7; margin-top: -4vh; }
+.lily .frame {
+  position: relative; overflow: hidden;
+  border-radius: var(--shape);
+  aspect-ratio: var(--ar);
+  max-width: 100%;
+  background: var(--botanical);
+  animation: breathe 22s ease-in-out infinite alternate;
+  transition: transform 1s var(--ease-water);
+}
+.lily:hover .frame, .lily:focus-visible .frame { transform: scale(1.015); }
+.lily .frame img, .lily .frame canvas { width: 100%; height: 100%; object-fit: cover; transition: transform 1.6s var(--ease-water), filter 1s; }
+.lily:hover .frame img { transform: scale(1.05); }
+.lily .reflection {
+  height: clamp(30px, 6vw, 80px); margin-top: -8px; overflow: hidden;
+  opacity: .28; filter: blur(5px) saturate(.9); transform: scaleY(-1); pointer-events: none;
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, transparent 90%); mask-image: linear-gradient(0deg, #000 0%, transparent 90%);
+}
+.lily .reflection > * { width: 100%; height: 300%; object-fit: cover; object-position: bottom; animation: shimmer 7s ease-in-out infinite alternate; }
+.lily figcaption { display: grid; gap: 4px; padding-left: 4px; }
+.lily .t { font-family: var(--f-serif); font-size: var(--s1); font-style: italic; line-height: 1.2; }
+.lily .d { color: rgba(241,240,232,.66); }
+.lily .open { position: absolute; inset: 0; z-index: 2; }
+@keyframes breathe {
+  0% { border-radius: var(--shape); }
+  100% { border-radius: var(--shape2); }
+}
+@keyframes shimmer { 0% { transform: translateX(-1.5%) skewX(-1deg); } 100% { transform: translateX(1.5%) skewX(1deg); } }
+
+
+/* Interlude — the path (mist) */
+#chemin { background: var(--mist); color: var(--ink); padding-block: 16vh 12vh; padding-right: 0; }
+#chemin .world-head { padding-right: var(--gutter-r); }
+#chemin .world-head h2 { color: var(--botanical); white-space: nowrap; font-size: clamp(2.8rem, .4rem + 11vw, 13rem); }
+#chemin .world-head .lede-note { color: #4a554b; }
+#chemin .eyebrow { color: #5d6a5f; }
+#chemin .eyebrow b { color: var(--ink); }
+.path-wrap { display: grid; gap: 26px; }
+.path {
+  position: relative; list-style: none; margin: 0; padding: 0 var(--gutter-r) 18px 0;
+  display: flex; align-items: flex-end; gap: clamp(28px, 5vw, 84px);
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: #a5b3a0 transparent;
+}
+.path:focus-visible { outline-offset: 8px; }
+.stop { position: relative; flex: none; display: grid; gap: 10px; scroll-snap-align: center; transition: opacity .6s; opacity: .62; }
+.stop.near { opacity: 1; }
+.stop:last-child { margin-right: clamp(0px, 20vw, 300px); }
+.stop .frame {
+  height: calc(var(--k) * clamp(240px, 54vh, 600px));
+  aspect-ratio: var(--ar); max-width: 82vw;
+  overflow: hidden; background: #d9d8cf;
+  box-shadow: 0 24px 60px -30px rgba(32,39,32,.45);
+  transition: transform 1s var(--ease-water);
+}
+.stop .frame img, .stop .frame canvas { width: 100%; height: 100%; object-fit: cover; }
+.stop:hover .frame { transform: translateY(-6px); }
+.stop-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.stop .yr { font-family: var(--f-display); font-size: var(--s3); line-height: .9; color: var(--botanical); }
+.stop .pl { color: #5d6a5f; }
+.stop-title { font-family: var(--f-serif); font-style: italic; font-size: var(--s1); line-height: 1.25; max-width: 30ch; }
+.stop .open { position: absolute; inset: 0; z-index: 2; }
+.ruler { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding-right: var(--gutter-r); color: var(--ink); max-width: 1200px; }
+.ruler .tool { color: var(--ink); }
+.ruler .tool:disabled { opacity: .25; cursor: default; }
+.years { position: relative; height: 44px; margin-inline: 12px; }
+.years::before { content: ""; position: absolute; left: 0; right: 0; top: 10px; height: 1px; background: rgba(32,39,32,.3); }
+.years button { position: absolute; top: 0; transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; padding: 2px 4px; font-size: .68rem; letter-spacing: .1em; color: #6b766c; font-variant-numeric: tabular-nums; }
+.years button i { width: 9px; height: 9px; border-radius: 50%; background: var(--mist); box-shadow: 0 0 0 1px #6b766c; margin-top: 6px; transition: transform .4s var(--ease-water), background .4s; }
+.years button[aria-current="true"] { color: var(--ink); }
+.years button[aria-current="true"] i { background: var(--botanical); box-shadow: 0 0 0 1px var(--botanical); transform: scale(1.4); }
+.years button:nth-child(4) span, .years button:nth-child(6) span, .years button:nth-child(8) span { margin-top: 14px; }
+.lily:nth-child(5) { grid-column: 4 / span 6; }
+@media (max-width: 900px) { .lily:nth-child(5) { grid-column: 1 / -1; } }
+@media (max-width: 720px) {
+  .stop .frame { height: calc(var(--k) * min(46vh, 340px)); }
+  .stop .yr { font-size: 2rem; }
+  .years button span { font-size: .56rem; }
+  .years button span { opacity: 0; transition: opacity .3s; margin-top: 0 !important; }
+  .years button[aria-current="true"] span { opacity: 1; }
+}
+
+/* World II — Atmosphere (paper) */
+#atmosphere { background: var(--mist); color: var(--ink); padding-block: 16vh 14vh; }
+#atmosphere .world-head h2 { color: var(--botanical); }
+#atmosphere .world-head .lede-note { color: #4a554b; }
+#atmosphere .eyebrow { color: #5d6a5f; }
+#atmosphere .eyebrow b { color: var(--ink); }
+.series-tabs { display: flex; flex-wrap: wrap; gap: 4px 28px; margin-bottom: 26px; border-bottom: 1px solid var(--paper-line); }
+.series-tabs button { padding: 12px 0; font-family: var(--f-serif); font-size: var(--s1); color: #6b766c; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.series-tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--botanical); }
+.series-tabs small { font-family: var(--f-sans); font-size: .7rem; letter-spacing: .14em; margin-left: 8px; color: #7b857c; }
+.compare-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: clamp(20px, 3vw, 48px); align-items: start; max-width: 1400px; }
+.stage {
+  position: relative; overflow: hidden; background: #d9d8cf;
+  aspect-ratio: 3 / 2; max-width: 100%;
+  touch-action: pan-y;
+  user-select: none;
+}
+.stage .layer { position: absolute; inset: 0; }
+.stage .layer > img, .stage .layer > canvas { width: 100%; height: 100%; object-fit: cover; }
+.stage .layer-b { clip-path: inset(0 0 0 var(--split, 50%)); }
+.seam { position: absolute; top: 0; bottom: 0; left: var(--split, 50%); width: 0; z-index: 3; pointer-events: none; }
+.seam::before { content: ""; position: absolute; top: 0; bottom: 0; left: -.5px; width: 1px; background: rgba(241,240,232,.9); box-shadow: 0 0 18px rgba(255,255,255,.6); }
+.seam span { position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; background: rgba(241,240,232,.92); display: grid; place-items: center; color: var(--ink); box-shadow: 0 6px 30px rgba(0,0,0,.18); }
+.stage input[type="range"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: ew-resize; z-index: 4; }
+.stage input[type="range"]:focus-visible + .seam span { outline: 2px solid var(--botanical); outline-offset: 3px; }
+.stage .tag { position: absolute; z-index: 2; bottom: 12px; padding: 4px 8px; background: rgba(241,240,232,.86); color: var(--ink); font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 500; }
+.stage .tag-a { left: 12px; } .stage .tag-b { right: 12px; }
+.compare-side { display: grid; gap: 22px; min-width: 0; }
+.cap { display: grid; gap: 6px; padding-bottom: 18px; border-bottom: 1px solid var(--paper-line); }
+.cap .k { color: #6b766c; }
+.cap .t { font-family: var(--f-serif); font-size: var(--s1); line-height: 1.25; }
+.cap .d { color: #5d6a5f; font-size: .88rem; }
+.cap button { justify-self: start; margin-top: 4px; color: var(--botanical); }
+.difference { display: grid; gap: 10px; }
+.difference p { margin: 0; font-family: var(--f-serif); font-style: italic; font-size: 1.05rem; line-height: 1.4; }
+.bars { display: grid; gap: 4px; }
+.bar { display: flex; height: 14px; }
+.bar i { flex: 1; }
+.spectrum { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 26px; max-width: 1400px; }
+.chip { display: grid; gap: 8px; text-align: left; padding: 0 0 10px; border-bottom: 2px solid transparent; transition: border-color .3s; min-width: 0; }
+.chip canvas { width: 100%; height: 54px; display: block; image-rendering: auto; filter: blur(.4px); }
+.chip .t { font-size: .78rem; line-height: 1.3; color: #3c4a40; }
+.chip .role { font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: #8a948b; min-height: 1em; }
+.chip[data-role="A"], .chip[data-role="B"] { border-color: var(--botanical); }
+.chip[data-role] .role { color: var(--botanical); }
+.drift-row { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; margin-top: 18px; color: #4a554b; font-size: .85rem; }
+.drift-row .textbtn { color: var(--botanical); }
+
+/* World III — Impression (ink) */
+#impression { background: var(--ink); padding-block: 16vh 12vh; }
+.instrument { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: clamp(20px, 3.5vw, 56px); align-items: start; max-width: 1500px; }
+.controls { display: grid; gap: 26px; min-width: 0; }
+.control-group { display: grid; gap: 10px; }
+.control-group .label { color: rgba(241,240,232,.6); }
+.pigments { display: grid; gap: 6px; }
+.pigment { display: grid; grid-template-columns: 54px 1fr; gap: 12px; align-items: center; text-align: left; padding: 6px 0; font-size: .82rem; color: rgba(241,240,232,.72); }
+.pigment .sw { display: flex; height: 18px; }
+.pigment .sw i { flex: 1; }
+.pigment[aria-pressed="true"] { color: var(--mist); }
+.pigment[aria-pressed="true"] .sw { box-shadow: 0 0 0 1px var(--mist), 0 0 0 4px var(--ink), 0 0 0 5px rgba(241,240,232,.5); }
+.brushes { display: flex; gap: 8px; flex-wrap: wrap; }
+.brushes button { padding: 8px 12px; border: 1px solid var(--ink-line); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; }
+.brushes button[aria-pressed="true"] { border-color: var(--mist); background: rgba(241,240,232,.08); }
+.controls input[type="range"] { width: 100%; accent-color: var(--sun); }
+.light-scale { display: flex; justify-content: space-between; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: rgba(241,240,232,.5); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.canvas-wrap { position: relative; min-width: 0; }
+#impression-canvas { width: 100%; aspect-ratio: 4 / 3; max-width: 100%; display: block; touch-action: none; cursor: crosshair; background: #d8d6cb; }
+.canvas-note { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; color: rgba(241,240,232,.56); font-size: .76rem; }
+.leroy { font-family: var(--f-serif); font-size: 1.02rem; line-height: 1.5; color: rgba(241,240,232,.8); margin: 0; max-width: 42ch; }
+
+/* Colophon */
+#colophon { background: var(--ink); padding-block: 10vh 14vh; border-top: 1px solid var(--ink-line); }
+.colophon { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px 48px; max-width: 1200px; color: rgba(241,240,232,.72); font-size: .88rem; }
+.colophon h3 { margin: 0 0 8px; font-family: var(--f-serif); font-weight: 400; font-style: italic; font-size: 1.2rem; color: var(--mist); }
+.colophon p { margin: 0 0 10px; }
+.end-mark { margin-top: 10vh; font-family: var(--f-display); font-size: var(--s4); letter-spacing: .3em; color: rgba(241,240,232,.12); line-height: 1; }
+
+/* ---------- Viewer (single work) ---------- */
+.viewer {
+  position: fixed; inset: 0; z-index: 60;
+  background: #161c17;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.viewer[hidden] { display: none !important; }
+.v-bar {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px var(--gutter-r) 14px var(--gutter);
+  background: linear-gradient(180deg, rgba(22,28,23,.9), rgba(22,28,23,0));
+}
+.v-nav { display: flex; gap: 4px; }
+.v-body { display: grid; gap: clamp(20px, 4vw, 60px); padding: 0 var(--gutter-r) 60px var(--gutter); min-height: calc(100svh - 70px); }
+.v-figure { margin: 0; display: grid; place-items: center; min-width: 0; position: relative; }
+.v-figure img, .v-figure canvas { max-height: 82svh; width: auto; max-width: 100%; object-fit: contain; box-shadow: 0 30px 90px rgba(0,0,0,.45); }
+.v-text { display: grid; gap: 14px; align-content: end; min-width: 0; }
+.v-text .k { color: rgba(241,240,232,.55); }
+.v-text h2 { margin: 0; font-family: var(--f-serif); font-weight: 300; font-size: var(--s3); line-height: 1.02; text-wrap: balance; }
+.v-text .who { font-size: var(--s0); color: rgba(241,240,232,.8); }
+.v-text .note { margin: 0; font-family: var(--f-serif); font-size: var(--s1); line-height: 1.5; max-width: 40ch; color: rgba(241,240,232,.9); }
+.v-text dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin: 6px 0 0; font-size: .82rem; color: rgba(241,240,232,.7); }
+.v-text dt { color: rgba(241,240,232,.45); letter-spacing: .12em; text-transform: uppercase; font-size: .66rem; padding-top: 3px; }
+.v-text dd { margin: 0; }
+.v-text .src { font-size: .78rem; color: rgba(241,240,232,.55); }
+.study-note { position: static; margin-top: 10px; justify-self: center; max-width: calc(100% - 24px); background: rgba(22,28,23,.78); color: rgba(241,240,232,.85); font-size: .7rem; padding: 6px 9px; letter-spacing: .02em; line-height: 1.35; }
+.layout-side .v-body { grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr); align-items: center; }
+.layout-top .v-body { grid-template-columns: minmax(0, 1fr); }
+.layout-top .v-text { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); column-gap: 48px; max-width: 1200px; justify-self: center; width: 100%; }
+.layout-top .v-text > :nth-child(-n+3) { grid-column: 1; }
+.layout-top .v-text > :nth-child(n+4) { grid-column: 2; }
+.layout-top .v-text > .note { grid-column: 2; grid-row: 1 / span 3; align-self: end; }
+.layout-full .v-body { grid-template-columns: minmax(0, 1fr); padding-left: 0; padding-right: 0; }
+.layout-full .v-figure img, .layout-full .v-figure canvas { max-height: 92svh; box-shadow: none; }
+.layout-full .v-text { padding: 0 var(--gutter-r) 0 var(--gutter); grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 48px; max-width: 1200px; justify-self: center; width: 100%; }
+.layout-full .v-text > .note { grid-column: 2; grid-row: 1 / span 4; align-self: start; }
+
+/* Index overlay */
+.index {
+  position: fixed; inset: 0; z-index: 55;
+  background: var(--botanical); color: var(--mist);
+  overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 80px) var(--gutter-r) calc(env(safe-area-inset-bottom, 0px) + 60px) var(--gutter);
+}
+.index[hidden] { display: none !important; }
+.index-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 40px 70px; }
+.index ol { list-style: none; margin: 0; padding: 0; }
+.index .rooms a { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--ink-line); text-decoration: none; }
+.index .rooms .n { font-size: .68rem; letter-spacing: .2em; text-transform: uppercase; color: rgba(241,240,232,.55); display: flex; gap: 10px; align-items: center; }
+.index .rooms .n i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.index .rooms .t { font-family: var(--f-display); font-size: var(--s3); line-height: 1; letter-spacing: .03em; }
+.index .rooms .d { color: rgba(241,240,232,.65); font-size: .88rem; }
+.index .rooms a:hover .t, .index .rooms a[aria-current="true"] .t { color: var(--sun); }
+.index .works button { display: flex; justify-content: space-between; gap: 16px; width: 100%; padding: 9px 0; border-bottom: 1px solid var(--ink-line); text-align: left; font-size: .88rem; }
+.index .works button:hover { color: var(--sun); }
+.index .works span:last-child { color: rgba(241,240,232,.55); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.index h3 { margin: 0 0 12px; }
+.index-close { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 18px); right: calc(var(--gutter-r) + 8px); }
+
+/* Export sheet */
+.sheet { position: fixed; inset: 0; z-index: 70; background: #161c17; display: grid; place-items: center; padding: 24px var(--gutter-r) 24px var(--gutter); }
+.sheet[hidden] { display: none !important; }
+.sheet-inner { display: grid; gap: 16px; max-width: 900px; width: 100%; }
+.sheet img { width: 100%; max-height: 70svh; object-fit: contain; }
+.sheet p { margin: 0; color: rgba(241,240,232,.7); font-size: .85rem; }
+.sheet .actions a { font-size: .7rem; letter-spacing: .22em; text-transform: uppercase; font-weight: 500; text-decoration: none; padding: 10px 0; border-bottom: 1px solid currentColor; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .compare-wrap, .instrument, .index-inner { grid-template-columns: minmax(0, 1fr); }
+  .layout-side .v-body { grid-template-columns: minmax(0, 1fr); }
+  .v-body { min-height: 0; align-content: start; }
+  .layout-top .v-text, .layout-full .v-text { grid-template-columns: minmax(0, 1fr); }
+  .layout-top .v-text > *, .layout-full .v-text > * { grid-column: 1 !important; grid-row: auto !important; }
+  .lily:nth-child(n) { grid-column: 1 / -1; margin-top: 0; }
+  .lily:nth-child(2) { grid-column: 4 / -1; }
+  .lily:nth-child(3) { grid-column: 1 / span 10; }
+}
+@media (max-width: 720px) {
+  .tide { display: none; }
+  .chrome .tool .txt { display: none; }
+  .chrome-tools { gap: 0; }
+  .tool { padding: 8px 7px; gap: 5px; }
+  .wordmark span { display: none; }
+  .locator { left: calc(var(--gutter) + 8px); transform: none; text-align: left; top: calc(env(safe-area-inset-top, 0px) + 46px); }
+  .locator .n { display: none; }
+  .locator .t { font-size: .9rem; }
+  .chapter { padding-left: var(--gutter); }
+  .stops { position: static; display: grid; grid-template-columns: repeat(5, 1fr); margin-bottom: 8px; }
+  .stops button { white-space: normal; font-size: .56rem; letter-spacing: .08em; text-align: center; line-height: 1.25; }
+  .horizon { padding-top: 0; }
+  .lab-panel { margin-top: 20vh; }
+  #pond { padding-bottom: 80px; }
+  #lab { padding-bottom: 70px; }
+  .stage { aspect-ratio: 4 / 3; }
+  .spectrum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lily .reflection { display: none; }
+}
+
+/* ---------- Motion preferences ---------- */
+body.still *, body.still *::before, body.still *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .2s !important; scroll-behavior: auto !important; }
+body.still .veil h1 span, body.still .veil .sub, body.still .veil .line, body.still .veil-actions { opacity: 1; filter: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+</style>
+
+</head>
+<body>
+<canvas id="pond-canvas" aria-hidden="true"></canvas>
+<div id="pond-fallback" aria-hidden="true" hidden></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- Entrée -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-labelledby="veil-title">
+  <div class="veil-inner">
+    <h1 id="veil-title" aria-label="Monet"><span>M</span><span style="animation-delay:.12s">O</span><span style="animation-delay:.24s">N</span><span style="animation-delay:.36s">E</span><span style="animation-delay:.48s">T</span></h1>
+    <div class="sub">Quand la lumière devient art</div>
+    <p class="line">Une exposition numérique sur la poésie de la lumière.</p>
+    <div class="veil-actions">
+      <button class="enter" id="enter" type="button">Entrer</button>
+      <button class="skip" id="skip" type="button">Passer l’intro</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cadre permanent -->
+<header class="chrome" id="chrome">
+  <button class="wordmark" id="to-entrance" type="button" aria-label="Revenir à l’entrée">
+    <b>MONET</b><span>Quand la lumière devient art</span>
+  </button>
+  <div class="chrome-tools">
+    <button class="tool" id="btn-index" type="button" aria-haspopup="dialog" aria-controls="index">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M2 5h14M2 9h9M2 13h12"/></svg><span class="txt">Index</span>
+    </button>
+    <button class="tool" id="btn-sound" type="button" aria-pressed="false">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M1 9c2-3 4-3 6 0s4 3 6 0 3-2 4-1"/></svg><span class="txt">Son</span><i class="dot-on"></i>
+    </button>
+    <button class="tool" id="btn-still" type="button" aria-pressed="false" title="Réduire les animations et simplifier l’image">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="M6 9h6"/></svg><span class="txt">Calme</span><i class="dot-on"></i>
+    </button>
+  </div>
+</header>
+
+<nav class="tide" id="tide" aria-label="Chapitres">
+  <ol>
+    <li><a href="#pond" style="--c:#a8c8cc"><i></i><span>Prologue · La peinture vivante</span></a></li>
+    <li><a href="#lab" style="--c:#e8c78b"><i></i><span>Le Laboratoire de la lumière</span></a></li>
+    <li><a href="#chemin" style="--c:#c9a26b"><i></i><span>Interlude · Le Chemin</span></a></li>
+    <li><a href="#water" style="--c:#5f8a6a"><i></i><span>Monde I · L’Eau</span></a></li>
+    <li><a href="#atmosphere" style="--c:#c5c0d6"><i></i><span>Monde II · L’Atmosphère</span></a></li>
+    <li><a href="#impression" style="--c:#e3a37c"><i></i><span>Monde III · Impression</span></a></li>
+    <li><a href="#colophon" style="--c:#f1f0e8"><i></i><span>Sources</span></a></li>
+  </ol>
+</nav>
+
+<div class="locator label" aria-live="polite"><span class="n" id="loc-n">Prologue</span><span class="t" id="loc-t">La peinture vivante</span></div>
+
+<main id="main">
+  <!-- Prologue -->
+  <section class="chapter" id="pond" data-chapter="pond" aria-labelledby="pond-title">
+    <div class="pond-copy">
+      <div class="eyebrow label"><b>Prologue</b><span>La peinture vivante</span></div>
+      <h2 id="pond-title" tabindex="-1">Tenez-vous au bord du bassin.</h2>
+      <p>Rien ici n’est une photographie ni une reproduction. L’eau est calculée sous vos yeux, d’après les jardins que Monet a peints pendant trente ans.</p>
+      <div class="pond-actions">
+        <button class="textbtn" id="btn-quiet" type="button" aria-pressed="false">Contempler</button>
+        <span class="hint" id="pond-hint">Bougez pour guider la lumière. Touchez l’eau.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Laboratoire -->
+  <section class="chapter" id="lab" data-chapter="lab" aria-labelledby="lab-title">
+    <div class="lab-head">
+      <div class="eyebrow label"><b>Laboratoire</b><span>Cinq heures, un bassin</span></div>
+      <h2 id="lab-title">Le Laboratoire de la lumière</h2>
+      <p>Un seul monde. Des atmosphères infinies.</p>
+    </div>
+    <div class="lab-panel">
+      <div class="lab-reading">
+        <output id="lab-name" for="lab-range">Brume matinale</output>
+        <span class="meta label" id="lab-meta">Brume 55 % · Éclat 35 %</span>
+      </div>
+      <div class="horizon">
+        <div class="stops" id="lab-stops" role="group" aria-label="Atmosphères"></div>
+        <label class="sr-only" for="lab-range">Heure du jour</label>
+        <input type="range" id="lab-range" min="0" max="400" step="1" value="0" aria-describedby="lab-meta">
+      </div>
+      <p class="lab-note" id="lab-note">Le laboratoire s’ouvre à votre heure locale. Ce sont des interprétations contemporaines de la lumière changeante, pas des reconstitutions des conditions dans lesquelles Monet a peint.</p>
+    </div>
+  </section>
+
+  <!-- Interlude -->
+  <section class="chapter" id="chemin" data-chapter="chemin" aria-labelledby="chemin-title">
+    <div class="world-head">
+      <div class="eyebrow label"><b>Interlude</b><span>1867–1891</span></div>
+      <h2 id="chemin-title">Le Chemin</h2>
+      <p>Vingt-quatre ans de lumière, de la Manche jusqu’à Giverny.</p>
+      <p class="lede-note">Neuf toiles, dans l’ordre où elles ont été peintes. Faites glisser le chemin, ou choisissez une année sur la frise.</p>
+    </div>
+    <div class="path-wrap">
+      <ol class="path" id="path" tabindex="0" aria-label="Le chemin, de 1867 à 1891"></ol>
+      <div class="ruler">
+        <button class="tool" id="path-prev" type="button" aria-label="Toile précédente"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M15 9H3m4-4-4 4 4 4"/></svg></button>
+        <div class="years" id="years" role="group" aria-label="Années"></div>
+        <button class="tool" id="path-next" type="button" aria-label="Toile suivante"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M3 9h12m-4-4 4 4-4 4"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Monde I -->
+  <section class="chapter" id="water" data-chapter="water" aria-labelledby="water-title">
+    <div class="world-head">
+      <div class="eyebrow label"><b>Monde I</b><span>Giverny, 1897–1919</span></div>
+      <h2 id="water-title">L’Eau</h2>
+      <p>La surface d’un bassin retient à la fois le ciel, les arbres et les fleurs.</p>
+      <p class="lede-note">Cinq toiles du jardin d’eau, posées sur le bassin. Choisissez-en une pour la voir en entier.</p>
+    </div>
+    <div class="lilies" id="lilies"></div>
+  </section>
+
+  <!-- Monde II -->
+  <section class="chapter" id="atmosphere" data-chapter="atmosphere" aria-labelledby="atmos-title">
+    <div class="world-head">
+      <div class="eyebrow label"><b>Monde II</b><span>Les séries, 1890–1903</span></div>
+      <h2 id="atmos-title">L’Atmosphère</h2>
+      <p>Le même motif, peint encore et encore. Seule la lumière change.</p>
+      <p class="lede-note">Choisissez deux toiles d’une série, puis faites glisser le curseur sur l’image pour passer d’une heure à l’autre.</p>
+    </div>
+    <div class="series-tabs" role="tablist" aria-label="Séries" id="series-tabs">
+      <button role="tab" aria-selected="true" data-series="stacks" id="tab-stacks" aria-controls="compare">Les Meules<small>1890–91</small></button>
+      <button role="tab" aria-selected="false" data-series="thames" id="tab-thames" aria-controls="compare">La Tamise, Londres<small>1900–03</small></button>
+    </div>
+    <div class="compare-wrap" id="compare" role="tabpanel" aria-labelledby="tab-stacks">
+      <div class="stage" id="stage">
+        <div class="layer layer-a" id="layer-a"></div>
+        <div class="layer layer-b" id="layer-b"></div>
+        <span class="tag tag-a">A</span><span class="tag tag-b">B</span>
+        <input type="range" id="split" min="0" max="100" value="50" aria-label="Passer du tableau A au tableau B">
+        <div class="seam" aria-hidden="true"><span><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M6 4 1 9l5 5M12 4l5 5-5 5"/></svg></span></div>
+      </div>
+      <div class="compare-side">
+        <div class="cap" id="cap-a"></div>
+        <div class="cap" id="cap-b"></div>
+        <div class="difference">
+          <span class="label" style="color:#6b766c">Écart mesuré</span>
+          <div class="bars" id="bars"></div>
+          <p id="diff-text"></p>
+        </div>
+      </div>
+    </div>
+    <div class="spectrum" id="spectrum" aria-label="Toiles de cette série"></div>
+    <div class="drift-row">
+      <button class="textbtn" id="btn-drift" type="button" aria-pressed="false">Laisser passer les heures</button>
+      <span>Chaque bande de couleur est relevée sur la toile elle-même : une grille de 8 × 5 zones.</span>
+    </div>
+  </section>
+
+  <!-- Monde III -->
+  <section class="chapter" id="impression" data-chapter="impression" aria-labelledby="imp-title">
+    <div class="world-head">
+      <div class="eyebrow label"><b>Monde III</b><span>Un instrument</span></div>
+      <h2 id="imp-title">Impression</h2>
+      <p>Peignez ce que vous voyez, avant de le nommer.</p>
+    </div>
+    <div class="instrument">
+      <div class="controls">
+        <p class="leroy">En 1874, un critique reprit le titre d’<em>Impression, soleil levant</em> de Monet (1872, musée Marmottan Monet, Paris) pour se moquer de tout le groupe. Le nom est resté. Ici, le pinceau est à vous.</p>
+        <div class="control-group">
+          <span class="label">Pigments tirés de</span>
+          <div class="pigments" id="pigments"></div>
+        </div>
+        <div class="control-group">
+          <span class="label">Pinceau</span>
+          <div class="brushes" id="brushes">
+            <button type="button" data-brush="dab" aria-pressed="true">Touche</button>
+            <button type="button" data-brush="drag" aria-pressed="false">Traînée</button>
+            <button type="button" data-brush="glaze" aria-pressed="false">Glacis</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="label" for="imp-light">Lumière sur la toile</label>
+          <input type="range" id="imp-light" min="0" max="100" value="55">
+          <div class="light-scale" aria-hidden="true"><span>Ombre froide</span><span>Soleil chaud</span></div>
+        </div>
+        <div class="actions">
+          <button class="textbtn" id="imp-auto" type="button">Laisser peindre la lumière</button>
+          <button class="textbtn" id="imp-clear" type="button">Effacer</button>
+          <button class="textbtn" id="imp-save" type="button">Garder cette image</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="impression-canvas" aria-label="Toile à peindre. Faites glisser pour peindre, ou utilisez le bouton Laisser peindre la lumière."></canvas>
+        <div class="canvas-note"><span>Votre composition, inspirée par l’exposition. Ce n’est pas un Monet.</span><span id="imp-count">0 touche</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sources -->
+  <section class="chapter" id="colophon" data-chapter="colophon" aria-labelledby="col-title">
+    <div class="eyebrow label" style="margin-bottom:28px"><b>Sources</b><span>Et ce qui est inventé</span></div>
+    <h2 id="col-title" class="sr-only">Sources</h2>
+    <div class="colophon">
+      <div>
+        <h3>Les tableaux</h3>
+        <p>Les vingt toiles appartiennent à l’Art Institute of Chicago. Titres, dates, dimensions, numéros d’inventaire et mentions de provenance viennent de l’API publique du musée ; les titres français sont des traductions, le titre officiel du musée figure sur la fiche de chaque œuvre. Les images, dans le domaine public (CC0), ont été téléchargées sur le site du musée et sont publiées avec la page.</p>
+        <p><a href="https://www.artic.edu/artists/35809/claude-monet" target="_blank" rel="noopener">Claude Monet à l’Art Institute of Chicago</a></p>
+      </div>
+      <div>
+        <h3>Ce qui est inventé</h3>
+        <p>Le bassin, les cinq atmosphères du Laboratoire et l’instrument de peinture sont des interprétations numériques originales. Ils ne reproduisent ni la méthode de Monet ni les conditions d’un tableau en particulier.</p>
+      </div>
+      <div>
+        <h3>Si une image ne charge pas</h3>
+        <p>Chaque tableau est alors remplacé par une étude de couleur signalée comme telle, construite à partir d’une grille de 8 × 5 couleurs relevée sur la toile. Elle montre la répartition des couleurs, jamais le tableau lui-même.</p>
+      </div>
+    </div>
+    <div class="end-mark" aria-hidden="true">MONET</div>
+  </section>
+</main>
+
+<!-- Visionneuse -->
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="v-title" hidden>
+  <div class="v-bar">
+    <button class="tool" id="v-close" type="button"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M11 4 6 9l5 5"/></svg><span id="v-return">Retour</span></button>
+    <div class="v-nav">
+      <button class="tool" id="v-prev" type="button" aria-label="Œuvre précédente"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M15 9H3m4-4-4 4 4 4"/></svg></button>
+      <button class="tool" id="v-next" type="button" aria-label="Œuvre suivante"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M3 9h12m-4-4 4 4-4 4"/></svg></button>
+    </div>
+  </div>
+  <div class="v-body">
+    <figure class="v-figure" id="v-figure"></figure>
+    <div class="v-text">
+      <span class="k label" id="v-k"></span>
+      <h2 id="v-title"></h2>
+      <span class="who" id="v-who"></span>
+      <p class="note" id="v-note"></p>
+      <dl id="v-dl"></dl>
+      <span class="src" id="v-src"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Index -->
+<div class="index" id="index" role="dialog" aria-modal="true" aria-labelledby="index-title" hidden>
+  <button class="tool index-close" id="index-close" type="button"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="m4 4 10 10M14 4 4 14"/></svg><span>Fermer</span></button>
+  <div class="index-inner">
+    <div>
+      <h2 id="index-title" class="label" style="margin:0 0 12px;color:rgba(241,240,232,.55)">Index de l’exposition</h2>
+      <ol class="rooms" id="rooms"></ol>
+    </div>
+    <div>
+      <h3 class="label" style="color:rgba(241,240,232,.55)">Les œuvres</h3>
+      <ol class="works" id="works"></ol>
+    </div>
+  </div>
+</div>
+
+<!-- Export -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <div class="sheet-inner">
+    <h2 id="sheet-title" class="label" style="margin:0">Votre impression</h2>
+    <img id="sheet-img" alt="Votre peinture créée avec l’instrument Impression">
+    <p>Si le téléchargement ne démarre pas, faites un clic droit ou un appui long sur l’image pour l’enregistrer.</p>
+    <div class="actions">
+      <a class="textbtn" id="sheet-dl" download="impression.png" href="#">Télécharger le PNG</a>
+      <button class="textbtn" id="sheet-close" type="button">Retour à la toile</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const WORKS = [
+{
+"id": 14598,
+"world": "chemin",
+"title": "La Plage de Sainte-Adresse",
+"titleEn": "The Beach at Sainte-Adresse",
+"date": "1867",
+"img": "95be2572-b53d-8e7b-abc9-10eb48d4fa5d",
+"credit": "Mr. and Mrs. Lewis Larned Coburn Memorial Collection",
+"dims": "75.8 × 102.5 cm",
+"layout": "side",
+"note": "Monet passe l’été 1867 dans sa famille à Sainte-Adresse, près du Havre. Barques, pêcheurs et voiles sous un grand ciel couvert : le ciel occupe déjà la moitié de la toile.",
+"place": "Sainte-Adresse, Normandie",
+"w": 3000,
+"h": 2217,
+"grid": [
+"868c8f",
+"898f92",
+"909699",
+"9ba1a2",
+"a2a7a6",
+"a8acab",
+"aaaeac",
+"b4b5b2",
+"90969a",
+"91999c",
+"90979b",
+"8a9298",
+"9ba0a1",
+"91999c",
+"90989b",
+"989e9e",
+"767973",
+"818584",
+"8c8f8e",
+"959999",
+"8f9597",
+"889195",
+"848e93",
+"909698",
+"8e8981",
+"7d7d79",
+"8e918e",
+"838987",
+"59656d",
+"566063",
+"728d8f",
+"728d8e",
+"7a7673",
+"858381",
+"a19e98",
+"b3b2ad",
+"a8a7a3",
+"a7a6a3",
+"9c9e9b",
+"929793"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"3e4044",
+"65645e",
+"748489",
+"85837c",
+"80898e",
+"768f91",
+"838c92",
+"888f92",
+"849095",
+"8a9297",
+"8c9497",
+"929392",
+"8f999c",
+"959a9c",
+"969da0",
+"9d9e9b",
+"9da3a3",
+"a4a3a0",
+"a5a9a7",
+"acaaa5",
+"afafab",
+"b2b3af",
+"b7b7b2",
+"bfbeb9"
+],
+"acc": "1933.439"
+},
+{
+"id": 81539,
+"world": "chemin",
+"title": "Au bord de la Seine, Bennecourt",
+"titleEn": "On the Bank of the Seine, Bennecourt",
+"date": "1868",
+"img": "66f95ea3-a11a-1cf4-6599-d0a49bb25744",
+"credit": "Potter Palmer Collection",
+"dims": "81.5 × 100.7 cm",
+"layout": "top",
+"note": "Une femme est assise sur la berge, à l’ombre d’un arbre. En face, les maisons du village se reflètent dans la Seine : le reflet tient presque autant de place que le paysage.",
+"place": "Bennecourt, sur la Seine",
+"w": 3000,
+"h": 2425,
+"grid": [
+"313a22",
+"3d4026",
+"3c4633",
+"3a4439",
+"3e483b",
+"4e605f",
+"6089b1",
+"6b91b1",
+"393f26",
+"373824",
+"30392d",
+"3a4034",
+"4a4c40",
+"676355",
+"857d63",
+"8d8869",
+"4b462c",
+"504930",
+"494a36",
+"6f6b56",
+"6d6954",
+"7d765e",
+"8c8566",
+"8e866c",
+"4b4837",
+"65635a",
+"7a796e",
+"8d8877",
+"89886e",
+"888164",
+"838064",
+"86876f",
+"3e4c26",
+"5a6546",
+"697163",
+"737f71",
+"4a5740",
+"435644",
+"4c6764",
+"5a675a"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"272b21",
+"293324",
+"333425",
+"2e3b27",
+"393c2b",
+"463c22",
+"38432d",
+"3d4d27",
+"3f4e3f",
+"495138",
+"515138",
+"5f553b",
+"5a634a",
+"637055",
+"776d4d",
+"55748e",
+"767960",
+"887b5c",
+"718a97",
+"8e8972",
+"9c8c72",
+"8c989d",
+"a2a094",
+"bfb6a0"
+],
+"acc": "1922.427"
+},
+{
+"id": 16554,
+"world": "chemin",
+"title": "La Maison de l’artiste à Argenteuil",
+"titleEn": "The Artist's House at Argenteuil",
+"date": "1873",
+"img": "7d533ed4-ff54-fa2c-64f4-2b16bfbb5880",
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "60.2 × 73.3 cm",
+"layout": "side",
+"note": "Monet s’installe à Argenteuil fin 1871. La maison louée par la famille, son jardin et ses pots de fleurs sous un ciel d’été deviennent un motif à part entière.",
+"place": "Argenteuil",
+"w": 3000,
+"h": 2450,
+"grid": [
+"6f8ca4",
+"93a4ae",
+"7795af",
+"84a2bd",
+"789ebe",
+"707a6e",
+"70734f",
+"7a8161",
+"708583",
+"657468",
+"6b705b",
+"7d939a",
+"93acbc",
+"778276",
+"667152",
+"74726d",
+"59674a",
+"565e42",
+"525543",
+"505344",
+"828473",
+"8a8780",
+"606954",
+"6d635b",
+"616848",
+"67704e",
+"636853",
+"64654d",
+"6b6f64",
+"707670",
+"60685f",
+"5d645a",
+"8f8870",
+"7f8079",
+"888180",
+"87817f",
+"847f7d",
+"6c6f71",
+"6c6e67",
+"565f55"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"414a41",
+"595143",
+"4a5d4e",
+"5b5d49",
+"685e4e",
+"536954",
+"686851",
+"606b54",
+"756c5b",
+"697158",
+"76755f",
+"6c7f6d",
+"7a7f5c",
+"7c817e",
+"877f73",
+"87807f",
+"8a8581",
+"6f90ac",
+"7d9197",
+"999381",
+"789ebf",
+"909fa6",
+"93a8b5",
+"b0bbbc"
+],
+"acc": "1933.1153"
+},
+{
+"id": 16571,
+"world": "chemin",
+"title": "Arrivée du train de Normandie, gare Saint-Lazare",
+"titleEn": "Arrival of the Normandy Train, Gare Saint-Lazare",
+"date": "1877",
+"img": "0f1cc0e0-e42e-be16-3f71-2022da38cb93",
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "60.3 × 80.2 cm",
+"layout": "full",
+"note": "En 1877, Monet peint une série de toiles dans la gare Saint-Lazare. Sous la verrière, la vapeur des locomotives devient une matière de lumière.",
+"place": "Paris, gare Saint-Lazare",
+"w": 3000,
+"h": 2251,
+"grid": [
+"45565c",
+"6e807f",
+"697a7c",
+"6c7d81",
+"5a6d76",
+"707f81",
+"53676d",
+"495651",
+"3e5155",
+"5f6b70",
+"8e9496",
+"8f9899",
+"73858a",
+"6e7e7f",
+"52666a",
+"3d4c47",
+"99a4a7",
+"aeb7bc",
+"a9b0b3",
+"a7aeb2",
+"7c8b91",
+"5a6b75",
+"46565b",
+"4d5651",
+"495760",
+"444d54",
+"5f6d76",
+"60727d",
+"3e4c53",
+"364247",
+"404e52",
+"4d5b56",
+"5b665c",
+"626f65",
+"647165",
+"616c60",
+"5d6a5e",
+"5e6b5c",
+"546857",
+"486657"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"283136",
+"313e42",
+"35484f",
+"3c4b4f",
+"444e4d",
+"435659",
+"505d5a",
+"476162",
+"5b6157",
+"516767",
+"5d6964",
+"5b6e6b",
+"5f7271",
+"6c7469",
+"62797d",
+"6e7c74",
+"6f8283",
+"798581",
+"7d8f93",
+"8b9492",
+"949ea1",
+"a5acad",
+"aeb4b6",
+"bfc4c5"
+],
+"acc": "1933.1158"
+},
+{
+"id": 16549,
+"world": "chemin",
+"title": "Pommes et raisins",
+"titleEn": "Apples and Grapes",
+"date": "1880",
+"img": "c12058f4-188f-c6ed-f0fe-52b32acfb296",
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "66.5 × 82.5 cm",
+"layout": "top",
+"note": "Une nature morte sur une nappe blanche. Monet traite le linge froissé comme il traite un ciel : par touches de bleus, de gris et de reflets.",
+"place": "Nature morte",
+"w": 3000,
+"h": 2398,
+"grid": [
+"938482",
+"857674",
+"7b6d6b",
+"6b6060",
+"594e4e",
+"59514d",
+"555252",
+"44413d",
+"7a7b80",
+"867b67",
+"7b756b",
+"5c6161",
+"4e403c",
+"736c58",
+"5f5f54",
+"67747b",
+"6e7479",
+"888a79",
+"837b70",
+"928470",
+"6a655b",
+"7e7665",
+"928d83",
+"838481",
+"73737a",
+"858389",
+"909199",
+"9e9ea4",
+"939398",
+"858684",
+"878985",
+"8d9086",
+"817977",
+"797073",
+"757174",
+"736e73",
+"817f82",
+"858789",
+"959794",
+"929388"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"3f3b3a",
+"474b49",
+"5e4a46",
+"585857",
+"6b5854",
+"5d6567",
+"6a6361",
+"6b6c6b",
+"736b69",
+"7a6d69",
+"866d62",
+"757778",
+"857872",
+"77838a",
+"937e70",
+"858683",
+"978978",
+"8d9699",
+"a39878",
+"9d9da3",
+"9ea4a4",
+"aaa6a1",
+"adaca9",
+"b6b6ae"
+],
+"acc": "1933.1152"
+},
+{
+"id": 14620,
+"world": "chemin",
+"title": "Promenade sur la falaise, Pourville",
+"titleEn": "Cliff Walk at Pourville",
+"date": "1882",
+"img": "b0effb1c-ff23-bbaa-f809-9fd94e31c1a0",
+"credit": "Mr. and Mrs. Lewis Larned Coburn Memorial Collection",
+"dims": "66.5 × 82.3 cm",
+"layout": "side",
+"note": "Monet séjourne à Pourville, près de Dieppe, en 1882. Deux promeneuses au bord de la falaise font face au vent, à la mer et aux voiles au loin.",
+"place": "Pourville, Normandie",
+"w": 3000,
+"h": 2402,
+"grid": [
+"7b96bc",
+"7c94b9",
+"8395b5",
+"7991b4",
+"8898b2",
+"8196b1",
+"7f99b2",
+"7095b2",
+"8a9eb7",
+"8b9db6",
+"8b9ab1",
+"889ab1",
+"959faf",
+"909aac",
+"8c9db0",
+"798383",
+"829b99",
+"819694",
+"819392",
+"768078",
+"8e8671",
+"8b8977",
+"7f876e",
+"6d725a",
+"96a19f",
+"949990",
+"939791",
+"75736a",
+"8b7e6e",
+"837e69",
+"828865",
+"828e66",
+"9e917f",
+"9f927a",
+"928877",
+"948c74",
+"958e7b",
+"8f8c74",
+"878a73",
+"868d76"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"59635f",
+"837766",
+"6b8383",
+"86836c",
+"748c7f",
+"96846d",
+"8a8c6d",
+"708eb4",
+"898e87",
+"9c8c6b",
+"9c8d7f",
+"7896a1",
+"8a9487",
+"7a97bb",
+"8c9a90",
+"8998b3",
+"9b9889",
+"949a9c",
+"a89781",
+"8b9fb7",
+"94a2b0",
+"9ea2a8",
+"a0a6af",
+"afaeb1"
+],
+"acc": "1933.443"
+},
+{
+"id": 81537,
+"world": "chemin",
+"title": "Bordighera",
+"titleEn": "Bordighera",
+"date": "1884",
+"img": "4d1b3ad0-14db-0d21-ad9f-17abb8bdfbb5",
+"credit": "Potter Palmer Collection",
+"dims": "65 × 80.8 cm",
+"layout": "full",
+"note": "Au début de 1884, Monet passe plusieurs mois à Bordighera, sur la Riviera italienne. La lumière du Sud le pousse vers des couleurs plus vives, à travers les pins tordus.",
+"place": "Bordighera, Italie",
+"w": 3000,
+"h": 2414,
+"grid": [
+"5c6866",
+"636d6b",
+"515f56",
+"5e5e3f",
+"58573c",
+"585842",
+"5f6849",
+"7b9c98",
+"6b7b85",
+"5a6a7e",
+"4b626b",
+"48524d",
+"575954",
+"545a51",
+"586054",
+"798f88",
+"6e7349",
+"6a7870",
+"536061",
+"5c5f63",
+"5d656e",
+"4c5e6e",
+"3c483d",
+"4a573d",
+"666e41",
+"626854",
+"5d6437",
+"5f623d",
+"595c45",
+"4a4f34",
+"3c4124",
+"454839",
+"667235",
+"61653a",
+"67673e",
+"656838",
+"4e4b30",
+"39372a",
+"343a24",
+"3c4133"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"242420",
+"31352e",
+"32443d",
+"424538",
+"4e473c",
+"39545d",
+"48564b",
+"52572f",
+"525858",
+"605a31",
+"605a55",
+"596739",
+"66692c",
+"546976",
+"666a5a",
+"726c34",
+"756c5f",
+"65775f",
+"737849",
+"827952",
+"6f8476",
+"8a855f",
+"7b9a9e",
+"909f99"
+],
+"acc": "1922.426"
+},
+{
+"id": 20545,
+"world": "chemin",
+"title": "Rochers à Port-Goulphar, Belle-Île",
+"titleEn": "Rocks at Port-Goulphar, Belle-Île",
+"date": "1886",
+"img": "2765aee9-3d78-ec6c-5c66-a1d9dc8173f6",
+"credit": "Gift of Mr. and Mrs. Chauncey B. Borland",
+"dims": "66 × 81.8 cm",
+"layout": "side",
+"note": "À l’automne 1886, Monet travaille plusieurs semaines sur la côte sauvage de Belle-Île. Les rochers et l’eau de l’Atlantique sont posés en touches serrées.",
+"place": "Belle-Île, Bretagne",
+"w": 3000,
+"h": 2401,
+"grid": [
+"989da7",
+"969eaa",
+"959ca9",
+"a3abb7",
+"9fa8b6",
+"949ba9",
+"90949e",
+"918f94",
+"4b4e52",
+"495057",
+"525257",
+"747068",
+"606870",
+"41424b",
+"39363b",
+"393537",
+"5a575a",
+"413c42",
+"4f494e",
+"504649",
+"564a4a",
+"483d42",
+"3b343e",
+"312b33",
+"4f474a",
+"595d6a",
+"596271",
+"3d4546",
+"425058",
+"5b6778",
+"50616b",
+"31484a",
+"364554",
+"758496",
+"6a7d8d",
+"3c5559",
+"576c78",
+"6d8490",
+"6e828a",
+"5c6f79"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"2a2a31",
+"26373c",
+"343740",
+"3d353c",
+"4a3739",
+"37434b",
+"4f4548",
+"334e55",
+"414f59",
+"4d5158",
+"5c5355",
+"4e5e66",
+"69615e",
+"536976",
+"6e6f71",
+"5a7582",
+"687e8c",
+"77828f",
+"80919f",
+"999ca7",
+"97a4b4",
+"a3a5af",
+"a5acb6",
+"abb4bd"
+],
+"acc": "1964.210"
+},
+{
+"id": 4783,
+"world": "chemin",
+"title": "Champ de coquelicots (Giverny)",
+"titleEn": "Poppy Field (Giverny)",
+"date": "1890–91",
+"img": "db94c894-a24c-c2e0-9db9-0506567a0152",
+"credit": "Mr. and Mrs. W. W. Kimball Collection",
+"dims": "61.2 × 93.4 cm",
+"layout": "top",
+"note": "Monet vit à Giverny depuis 1883. Ce champ voisin, peint à l’époque des Meules, ferme le chemin : la suite se passe dans son jardin.",
+"place": "Giverny",
+"w": 3000,
+"h": 1948,
+"grid": [
+"5e81ac",
+"6086ba",
+"6488bf",
+"698cc1",
+"6489bc",
+"628ac5",
+"6c8cbc",
+"6085b4",
+"7190b9",
+"7d93bb",
+"7594c9",
+"7496cf",
+"6588b7",
+"7998cd",
+"6888af",
+"6f8eb6",
+"5d7783",
+"5f7e88",
+"7c94bf",
+"6a8ab3",
+"718db8",
+"7b92c2",
+"54718c",
+"4b677b",
+"848370",
+"818275",
+"828581",
+"82857e",
+"84848b",
+"84828a",
+"7b7b79",
+"73726b",
+"837e6a",
+"8a856d",
+"948c77",
+"988d7b",
+"928f7c",
+"928c7a",
+"928b7a",
+"8f8673"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"3b5a6a",
+"496b80",
+"547683",
+"697e85",
+"5b8199",
+"5c84ba",
+"8d7f6d",
+"6a889d",
+"6389c0",
+"a87f72",
+"8f8774",
+"6b8cb4",
+"6a8fc9",
+"7592a9",
+"aa887c",
+"978e7b",
+"7293c2",
+"849299",
+"7294cb",
+"7798cf",
+"a59286",
+"b39388",
+"969ba5",
+"849dcc"
+],
+"acc": "1922.4465"
+},
+{
+"id": 16568,
+"world": "water",
+"title": "Nymphéas",
+"date": "1906",
+"img": "3c27b499-af56-f0d5-93b5-a7f2f1ad5813",
+"w": 3000,
+"h": 2881,
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "89.9 × 94.1 cm",
+"layout": "side",
+"note": "Vu de tout près, sans rive ni horizon. Le ciel reflété remplace l’horizon, et les feuilles flottent sur une surface qui est aussi une image de l’air.",
+"grid": [
+"556c71",
+"566d75",
+"5a6e78",
+"5f787b",
+"5e7778",
+"587677",
+"566f79",
+"526870",
+"47656e",
+"54717e",
+"597585",
+"546f72",
+"657e81",
+"62807e",
+"537570",
+"557074",
+"55758f",
+"527d9b",
+"55819f",
+"517b90",
+"578095",
+"5a8593",
+"587a84",
+"627d75",
+"4f6b68",
+"466c7c",
+"447388",
+"517b93",
+"527992",
+"537a91",
+"4b708f",
+"44687a",
+"305963",
+"376171",
+"3c6474",
+"426777",
+"3b6771",
+"3f6674",
+"486374",
+"495f77"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"28525e",
+"335c6b",
+"32646e",
+"476071",
+"565c72",
+"3d6566",
+"3d6684",
+"566573",
+"496b78",
+"536b75",
+"5f6b7c",
+"49736f",
+"3e7595",
+"567582",
+"4d7694",
+"5c7683",
+"677684",
+"4f8195",
+"5d818e",
+"6c828d",
+"5a8999",
+"6c8b8d",
+"7e8e8f",
+"91a098"
+],
+"titleEn": "Water Lilies",
+"acc": "1933.1157"
+},
+{
+"id": 16564,
+"world": "water",
+"title": "Bras de Seine près de Giverny (brume)",
+"date": "1897",
+"img": "838d8c33-a3b4-68ea-587b-87ceec2011af",
+"w": 3000,
+"h": 2911,
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "89.9 × 92.7 cm",
+"layout": "full",
+"note": "De la série des Matinées sur la Seine. Arbres, eau et reflets se fondent dans une même bande de brume : l’œil peine à dire où finit la berge.",
+"grid": [
+"6b7087",
+"70748e",
+"767b93",
+"757d92",
+"9a99a9",
+"baaeb1",
+"b7acb1",
+"afa7ad",
+"6f7689",
+"767c95",
+"82839c",
+"9596ac",
+"a4a2b7",
+"bbaeb5",
+"afa9b9",
+"a9a7b9",
+"7a7b96",
+"81839b",
+"979ab4",
+"a8afcc",
+"adb3cd",
+"b0b1c6",
+"aeb0c7",
+"a9adc4",
+"8d8db2",
+"9694b7",
+"989ab4",
+"aeafc4",
+"b5b2c5",
+"c0b5bd",
+"b0abba",
+"a7a5b9",
+"8c8fa9",
+"9798b0",
+"9da0b7",
+"a1a3b7",
+"adabbc",
+"c1b6bb",
+"b7aeb7",
+"aea5b2"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"6a7088",
+"6d768c",
+"747790",
+"767d94",
+"7e819a",
+"8584a0",
+"8b8ca9",
+"9092ae",
+"9397b0",
+"9c9ab3",
+"9ea1b8",
+"a9a1b0",
+"a6a6b9",
+"afa7b4",
+"b5a9b0",
+"a9abc1",
+"afacbe",
+"b8adb4",
+"adb0c8",
+"bbb0b6",
+"acb3cd",
+"b1b4cc",
+"bdb3bb",
+"c3b8be"
+],
+"titleEn": "Branch of the Seine near Giverny (Mist)",
+"acc": "1933.1156"
+},
+{
+"id": 87088,
+"world": "water",
+"title": "Le Bassin aux nymphéas",
+"date": "1900",
+"img": "8534685d-1102-e1e3-e194-94f6e925e8b0",
+"w": 3000,
+"h": 2668,
+"credit": "Mr. and Mrs. Lewis Larned Coburn Memorial Collection",
+"dims": "89.8 × 101 cm",
+"layout": "top",
+"note": "Le pont de bois à la japonaise enjambe le bassin que Monet fit aménager à partir de 1893, sur un terrain voisin de sa maison de Giverny. Ce jardin devient le sujet auquel il revient le plus.",
+"grid": [
+"524843",
+"4d403a",
+"4c4138",
+"564f3c",
+"5b5443",
+"63624f",
+"605b4b",
+"706852",
+"5f624f",
+"5b5a47",
+"463e3b",
+"514c40",
+"4f4b42",
+"464541",
+"4d4a43",
+"4a5249",
+"4b3d33",
+"4b473d",
+"5c5b4c",
+"6b6752",
+"6f6756",
+"7a7660",
+"706f55",
+"5d664c",
+"4c4e39",
+"4a5142",
+"606457",
+"6e725f",
+"767668",
+"706d64",
+"6a7265",
+"697564",
+"4d5e56",
+"5d706c",
+"627771",
+"637972",
+"607266",
+"5d5a52",
+"606b61",
+"5f6d63"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"453430",
+"423c36",
+"4f3c36",
+"42433b",
+"4e423b",
+"56433b",
+"3d4e42",
+"554a40",
+"4c4d42",
+"5c4f43",
+"555245",
+"695145",
+"476254",
+"576251",
+"626350",
+"6b6653",
+"7d6653",
+"5c786c",
+"727960",
+"857b63",
+"6b8678",
+"938b70",
+"70948d",
+"a19f8b"
+],
+"titleEn": "Water Lily Pond",
+"acc": "1933.441"
+},
+{
+"id": 97933,
+"world": "water",
+"title": "Le Bassin aux nymphéas",
+"date": "1917–19",
+"img": "7a23ad22-2044-6d7d-6315-9b101dadc559",
+"w": 3000,
+"h": 1935,
+"credit": "Gift of Mrs. Harvey Kaplan",
+"dims": "130.2 × 201.9 cm",
+"layout": "full",
+"note": "Une toile tardive, large de plus de deux mètres. À cette échelle, le bassin cesse d’être une vue et devient un champ de couleur qui déborde du cadre.",
+"grid": [
+"7e8259",
+"73724a",
+"7f7962",
+"867b6e",
+"787049",
+"786a44",
+"776244",
+"76654d",
+"696540",
+"716d4b",
+"817b61",
+"827c69",
+"736e46",
+"6d6941",
+"635939",
+"5c5945",
+"74704c",
+"736f45",
+"6c6747",
+"817c68",
+"777458",
+"706d4d",
+"746d53",
+"6a6351",
+"68694d",
+"686a47",
+"62613c",
+"6e6f5c",
+"717259",
+"676656",
+"6d5d40",
+"726546",
+"666943",
+"64603a",
+"696450",
+"727165",
+"7d7869",
+"848a74",
+"888667",
+"8d8663"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"575139",
+"53583e",
+"605838",
+"6b5536",
+"5d5f38",
+"5c5f4e",
+"6c5f3f",
+"5e6552",
+"696648",
+"6f6747",
+"796748",
+"6f6f49",
+"687064",
+"727262",
+"787257",
+"7e7458",
+"88745d",
+"767e64",
+"807e64",
+"868063",
+"8f8166",
+"8d8b6a",
+"919977",
+"a9a280"
+],
+"titleEn": "Water Lily Pond",
+"acc": "1982.825"
+},
+{
+"id": 64818,
+"world": "atmosphere",
+"series": "stacks",
+"title": "Meules (fin de l’été)",
+"date": "1890–91",
+"img": "a38e2828-ec6f-ece1-a30f-70243449197b",
+"w": 3000,
+"h": 1773,
+"credit": "Gift of Arthur M. Wood, Sr. in memory of Pauline Palmer Wood",
+"dims": "60 × 100.5 cm",
+"layout": "top",
+"note": "La série naît dans les champs voisins de la maison de Giverny. Ici, les meules baignent dans une brume de fin d’été, leurs ombres à peine plus sombres que l’air.",
+"grid": [
+"a8b0b1",
+"a3aaab",
+"a6a9ac",
+"a7a6a5",
+"a6a9a2",
+"aeaf9e",
+"b7b5a3",
+"bcb9a9",
+"a39f99",
+"99938d",
+"9d948c",
+"9e9484",
+"998f7d",
+"a19379",
+"a49575",
+"b8a685",
+"6a777a",
+"6f6d6e",
+"706a61",
+"646c68",
+"5d6054",
+"78625c",
+"78635a",
+"827657",
+"908a81",
+"877b75",
+"8e7b6d",
+"91837c",
+"827d78",
+"796b66",
+"796758",
+"85745d",
+"8e887d",
+"86857f",
+"79857f",
+"747f7e",
+"707d82",
+"86837f",
+"948885",
+"938579"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"615b50",
+"7a5f56",
+"646b69",
+"7e6a60",
+"677a77",
+"7f7a67",
+"747b7e",
+"7e7e86",
+"8a7d72",
+"997f6e",
+"85857f",
+"878881",
+"8a8d83",
+"9c8a7b",
+"a88a7a",
+"aa9683",
+"a9a59b",
+"a6a8a4",
+"acada1",
+"a7afb2",
+"b4ae99",
+"bcad91",
+"b6b5a4",
+"bfb8a4"
+],
+"titleEn": "Stacks of Wheat (End of Summer)",
+"acc": "1985.1103"
+},
+{
+"id": 14624,
+"world": "atmosphere",
+"series": "stacks",
+"title": "Meules (fin de journée, automne)",
+"date": "1890–91",
+"img": "4c364c64-2108-4e19-5fc5-1ab26ba924a7",
+"w": 3000,
+"h": 1954,
+"credit": "Mr. and Mrs. Lewis Larned Coburn Memorial Collection",
+"dims": "65.8 × 101 cm",
+"layout": "side",
+"note": "Le même motif à la fin d’une journée d’automne. Le sujet ne bouge pas ; l’heure et la saison font tout le changement.",
+"grid": [
+"aeaba6",
+"afaea7",
+"b2ada4",
+"b1b0a7",
+"afb4a6",
+"aeb2a2",
+"a6ad9b",
+"9eaa90",
+"91858d",
+"90888c",
+"948c8a",
+"99928b",
+"a09787",
+"a79178",
+"ae9a7f",
+"ab9e81",
+"676067",
+"786161",
+"6a6460",
+"716763",
+"7c6860",
+"856659",
+"85675e",
+"706356",
+"7e6669",
+"866665",
+"877470",
+"8b7877",
+"8a6965",
+"8a615c",
+"855c54",
+"826762",
+"81726a",
+"827675",
+"807676",
+"7f7777",
+"7f7675",
+"817574",
+"80716b",
+"786c68"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"5d5e61",
+"715e55",
+"865b56",
+"846359",
+"746864",
+"636c6f",
+"8d635f",
+"8d6861",
+"756f6e",
+"826d6b",
+"8e6f6d",
+"7d7673",
+"7f7874",
+"90767a",
+"807d78",
+"907c7d",
+"ae9b8e",
+"c09f8f",
+"a3ab9c",
+"baa999",
+"a3b2a9",
+"b8ae99",
+"aeb4a8",
+"b9b49c"
+],
+"titleEn": "Stacks of Wheat (End of Day, Autumn)",
+"acc": "1933.444"
+},
+{
+"id": 103139,
+"world": "atmosphere",
+"series": "thames",
+"title": "Waterloo Bridge, temps gris",
+"date": "1900",
+"img": "6f61a6fc-dcd8-e801-0ad8-5f7e561d91b6",
+"w": 3000,
+"h": 2124,
+"credit": "Gift of Mrs. Mortimer B. Harris",
+"dims": "65.4 × 92.6 cm",
+"layout": "full",
+"note": "Monet peint la Tamise depuis sa chambre de l’hôtel Savoy, revenant aux mêmes ponts par des temps différents. Les jours gris donnent un pont fait presque uniquement d’atmosphère.",
+"grid": [
+"8c9284",
+"8c938a",
+"909690",
+"959790",
+"96978f",
+"929188",
+"92938c",
+"8e8e84",
+"7e8881",
+"878e8a",
+"828d8d",
+"7d8889",
+"778484",
+"7a8482",
+"828682",
+"7f8581",
+"5d7472",
+"5e7373",
+"5e7274",
+"617478",
+"556e74",
+"5a6e71",
+"536a6d",
+"4e676b",
+"777f75",
+"576d69",
+"526b6c",
+"647371",
+"516768",
+"5e6e6c",
+"596968",
+"5d6c68",
+"747d73",
+"60756e",
+"66746c",
+"6e756c",
+"6e766d",
+"767970",
+"7e7b72",
+"887d72"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"446063",
+"456468",
+"506567",
+"4c6a6e",
+"55696a",
+"566e71",
+"5f6e6a",
+"63736e",
+"657875",
+"6e7771",
+"767970",
+"837a6f",
+"6d8081",
+"7c8178",
+"7b8581",
+"7f8984",
+"8f887e",
+"868e88",
+"8c9086",
+"929087",
+"8f938b",
+"97958c",
+"909790",
+"999b93"
+],
+"titleEn": "Waterloo Bridge, Gray Weather",
+"acc": "1984.1173"
+},
+{
+"id": 20701,
+"world": "atmosphere",
+"series": "thames",
+"title": "Waterloo Bridge, effet de soleil",
+"date": "1903",
+"img": "827d02ef-6765-9728-c07e-52ad22b73fd3",
+"w": 3000,
+"h": 1933,
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "65.7 × 101 cm",
+"layout": "side",
+"note": "Beaucoup des toiles londoniennes sont commencées sur place puis achevées à Giverny. Ici le soleil ne dissipe pas le brouillard : il le colore.",
+"grid": [
+"8a91a6",
+"8f93ad",
+"9592ac",
+"9b93ae",
+"9b97b1",
+"9996af",
+"9796af",
+"9497ae",
+"8687a0",
+"8e89a7",
+"8c89a8",
+"8d8cae",
+"928fb0",
+"9792af",
+"9392ae",
+"9192ac",
+"848098",
+"90899f",
+"908ba3",
+"908aa3",
+"908aa3",
+"8d89a4",
+"8385a4",
+"8387a8",
+"757b9e",
+"6f78a1",
+"8184a6",
+"7a81a9",
+"8185aa",
+"8387ab",
+"8489ab",
+"898cab",
+"797ca2",
+"7f81a6",
+"8888ab",
+"898bad",
+"8d8eb2",
+"8c8fb2",
+"8a90b4",
+"848fb4"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"6776a4",
+"797b9f",
+"7581aa",
+"7c82a7",
+"85829e",
+"8384a8",
+"8087ad",
+"8888a9",
+"8e88a3",
+"828baf",
+"898bac",
+"878db0",
+"928ba5",
+"968ba2",
+"8e8eac",
+"9d8c9d",
+"8792b2",
+"9192af",
+"9294b0",
+"9993ad",
+"9299b4",
+"9d97ae",
+"9998b1",
+"a698aa"
+],
+"titleEn": "Waterloo Bridge, Sunlight Effect",
+"acc": "1933.1163"
+},
+{
+"id": 16544,
+"world": "atmosphere",
+"series": "thames",
+"title": "Charing Cross Bridge, Londres",
+"date": "1901",
+"img": "e9179922-f68d-34c5-481d-abf49e046863",
+"w": 3000,
+"h": 2095,
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "65 × 92.2 cm",
+"layout": "top",
+"note": "Un second pont vu du même hôtel. La ville se réduit à quelques bandes horizontales et à la lumière prise entre elles.",
+"grid": [
+"908f81",
+"909386",
+"9b968d",
+"a4a291",
+"a5a792",
+"b1ac94",
+"b9af93",
+"c4b37f",
+"8f8987",
+"948d89",
+"9d928b",
+"a59b8a",
+"ada38f",
+"a4a497",
+"b2a78f",
+"c1ac78",
+"868a8e",
+"898b93",
+"8d8d91",
+"949492",
+"929b98",
+"929a8f",
+"949987",
+"959780",
+"838384",
+"8b898c",
+"878b8a",
+"99958b",
+"88958e",
+"9c9c8b",
+"93988a",
+"8e8e89",
+"8a8883",
+"8e8f88",
+"8f8f83",
+"999784",
+"9a9b81",
+"918f85",
+"888c86",
+"868981"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"778383",
+"868585",
+"888a89",
+"8d8987",
+"7b8e8d",
+"918b88",
+"888f89",
+"988b89",
+"909082",
+"90918d",
+"999084",
+"9a918f",
+"8c968d",
+"9a9689",
+"979a8a",
+"999c8c",
+"a69b88",
+"9ba193",
+"a5a18d",
+"aea28b",
+"aea791",
+"b2ae93",
+"bfae86",
+"c7b582"
+],
+"titleEn": "Charing Cross Bridge, London",
+"acc": "1933.1150"
+},
+{
+"id": 16584,
+"world": "atmosphere",
+"series": "thames",
+"title": "Le Parlement de Londres",
+"date": "1900–1",
+"img": "03930df3-1e6c-eeca-8660-c0b22ca477ff",
+"w": 3000,
+"h": 2618,
+"credit": "Mr. and Mrs. Martin A. Ryerson Collection",
+"dims": "81.2 × 92.8 cm",
+"layout": "full",
+"note": "Pour ce motif, Monet travaille depuis l’hôpital St Thomas, sur l’autre rive. Le Parlement devient une silhouette dans la lumière contre laquelle il se dresse.",
+"grid": [
+"8c97a4",
+"9a9faa",
+"a6a5aa",
+"9ba3aa",
+"909fad",
+"8e9cab",
+"919ba7",
+"88949c",
+"7f91a3",
+"8f9ba8",
+"8c9fac",
+"6d879e",
+"8e9aab",
+"959ca8",
+"81929e",
+"728897",
+"78899a",
+"668293",
+"668597",
+"5a7f98",
+"638797",
+"748f9b",
+"5b8193",
+"527a8e",
+"768f99",
+"5d8091",
+"5d8294",
+"5e8599",
+"5b8497",
+"5a7d8b",
+"557b8a",
+"577989",
+"828e99",
+"818e97",
+"8f939b",
+"758991",
+"7c8d94",
+"6d7979",
+"647576",
+"616e70"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"4f7282",
+"667374",
+"4c798f",
+"55798c",
+"547e92",
+"5f8092",
+"548499",
+"6c818c",
+"618697",
+"6a8795",
+"738896",
+"7e8995",
+"768e9b",
+"848f9b",
+"8294a1",
+"8398a6",
+"8f96a2",
+"9497a1",
+"869eac",
+"9d999f",
+"949fac",
+"96a4af",
+"a5a2a8",
+"aaabb0"
+],
+"titleEn": "Houses of Parliament, London",
+"acc": "1933.1164"
+},
+{
+"id": 4887,
+"world": "water",
+"title": "Iris",
+"titleEn": "Irises",
+"date": "1914–17",
+"img": "1f925e43-ff81-5ad7-da75-b28ea651c09f",
+"credit": "Art Institute Purchase Fund",
+"dims": "200 × 200.7 cm",
+"layout": "full",
+"note": "Une toile de deux mètres de côté, peinte dans le jardin de Giverny. De près, les iris se défont en traits de couleur ; de loin, ils redeviennent un massif au bord de l’eau.",
+"w": 3000,
+"h": 2995,
+"grid": [
+"616a4d",
+"607350",
+"687550",
+"5c7b63",
+"58836b",
+"607e69",
+"648a64",
+"6b865a",
+"576453",
+"586c57",
+"55715e",
+"58725e",
+"5c6f53",
+"5d7357",
+"678768",
+"658864",
+"496b6f",
+"4c7475",
+"537777",
+"587a6f",
+"5b7f6e",
+"5b7f69",
+"618266",
+"62865f",
+"426b6d",
+"487272",
+"50716b",
+"557965",
+"587668",
+"5b7a6b",
+"557b66",
+"597e67",
+"426963",
+"456973",
+"456473",
+"506c5e",
+"526b60",
+"466860",
+"4f6d62",
+"53745b"
+],
+"gw": 8,
+"gh": 5,
+"pal": [
+"3a5865",
+"4f5e57",
+"40665c",
+"446675",
+"50675d",
+"636646",
+"446e5c",
+"476e73",
+"516f58",
+"506f73",
+"5a6f5a",
+"6a6f4b",
+"4d785e",
+"4d7872",
+"57795a",
+"577a72",
+"5e7a64",
+"6d7a5f",
+"578366",
+"628464",
+"73856d",
+"698c6b",
+"70926c",
+"809e6e"
+],
+"acc": "1956.1202"
+}
+];
+
+/* ---------- Shared helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (t) => t * t * (3 - 2 * t);
+const hex = (h) => { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255]; };
+const toHex = (c) => '#' + c.map((v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+const store = {
+  get(k) { try { return localStorage.getItem('monet.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('monet.' + k, v); } catch (e) { /* storage unavailable */ } },
+};
+
+const state = {
+  still: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  quiet: false,
+  entered: false,
+  chapter: 'pond',
+  coarse: matchMedia('(pointer: coarse)').matches,
+};
+
+const IIIF = (id, w) => `https://www.artic.edu/iiif/2/${id}/full/${w},/0/default.jpg`;
+/* local copies published with the page: img/<artwork id>-<width>.jpg (widths 400, 843, 1686) */
+const LOCAL = (work, w) => `img/${work.id}-${w <= 400 ? 400 : w <= 843 ? 843 : 1686}.jpg`;
+const AIC_PAGE = (id) => `https://www.artic.edu/artworks/${id}`;
+
+/* Seeded random for repeatable colour studies */
+function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+/* Colour study: painterly fallback drawn from the museum's 8-pixel preview.
+   It is labelled wherever it appears and never presented as the painting. */
+function drawStudy(canvas, work, W, H) {
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const r = rng(work.id);
+  const pal = work.pal.map(hex);
+  // base: upscale the colour grid when we have it, otherwise a banded wash from the palette
+  if (work.grid) {
+    const g = document.createElement('canvas'); g.width = work.gw; g.height = work.gh;
+    const gx = g.getContext('2d'); const img = gx.createImageData(work.gw, work.gh);
+    work.grid.forEach((h, i) => { const c = hex(h); img.data[i * 4] = c[0] * 255; img.data[i * 4 + 1] = c[1] * 255; img.data[i * 4 + 2] = c[2] * 255; img.data[i * 4 + 3] = 255; });
+    gx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.filter = 'blur(' + Math.round(W / 40) + 'px)';
+    ctx.drawImage(g, -W * .05, -H * .05, W * 1.1, H * 1.1);
+    ctx.filter = 'none';
+  } else {
+    const grd = ctx.createLinearGradient(0, 0, 0, H);
+    pal.forEach((c, i) => grd.addColorStop(i / Math.max(1, pal.length - 1), toHex(pal[pal.length - 1 - i])));
+    ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+  }
+  // broken-colour dabs sampled from the surface beneath
+  const base = ctx.getImageData(0, 0, W, H).data;
+  const n = Math.round((W * H) / 260);
+  for (let i = 0; i < n; i++) {
+    const x = r() * W, y = r() * H;
+    const k = ((y | 0) * W + (x | 0)) * 4;
+    let c = [base[k] / 255, base[k + 1] / 255, base[k + 2] / 255];
+    if (r() < .35) c = mix3(c, pal[(r() * pal.length) | 0], .45);
+    const j = (r() - .5) * .08; c = c.map((v) => v + j);
+    const a = (r() - .5) * .9 + (y / H - .5) * .4;
+    const len = 6 + r() * W / 45, wid = 2 + r() * W / 160;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    ctx.globalAlpha = .55; ctx.fillStyle = toHex(c);
+    ctx.beginPath(); ctx.ellipse(0, 0, len, wid, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', 'Étude de couleur de ' + work.title + ' (image indisponible)');
+  canvas.dataset.study = '1';
+}
+
+/* An <img> for a work that falls back to a colour study on error. */
+function workImage(work, width, opts = {}) {
+  const wrap = document.createDocumentFragment();
+  const img = new Image();
+  img.alt = `${work.title}, ${work.date}, par Claude Monet`;
+  img.decoding = 'async';
+  if (opts.lazy !== false) img.loading = 'lazy';
+  img.src = LOCAL(work, width);
+  img.width = work.w > work.h ? width : Math.round(width * work.w / work.h);
+  img.height = Math.round(img.width * work.h / work.w);
+  // local copy first, then the museum's server, then a labelled colour study
+  const onErr = () => {
+    if (!img.dataset.remote) { img.dataset.remote = '1'; img.src = IIIF(work.img, width); return; }
+    const c = document.createElement('canvas');
+    const W = 640, H = Math.round(640 * work.h / work.w);
+    drawStudy(c, work, W, H);
+    c.className = img.className;
+    img.replaceWith(c);
+    if (opts.onStudy) opts.onStudy(c);
+    img.removeEventListener('error', onErr);
+  };
+  img.addEventListener('error', onErr);
+  wrap.appendChild(img);
+  return img;
+}
+
+/* ---------- The Living Painting: a 2.5D painterly pond in one fragment shader ---------- */
+
+/* Five atmospheres. Interpretations of changing light, not reconstructions. */
+const ATMOS = [
+  { name: 'Brume matinale', hour: '06:40', skyA: '#e4e2e6', skyB: '#c5c0d6', water: '#7ea4ab', pad: '#5f7f5d', padL: '#b4c0a6', flower: '#efc9d2', light: '#f6f1e2', haze: '#e9e8e3', p: [.58, .35, .86, 1.05], q: [.35, .82, 0, 0] },
+  { name: 'Clarté de midi', hour: '12:30', skyA: '#d6eaee', skyB: '#a8c8cc', water: '#4d7b84', pad: '#3e6a43', padL: '#97b77d', flower: '#f2a0b4', light: '#fffbea', haze: '#dfe9e6', p: [.10, 1.0, 1.1, 1.06], q: [.55, 1.06, 0, 0] },
+  { name: 'Heure dorée', hour: '18:50', skyA: '#f6cf8a', skyB: '#e6a472', water: '#45546b', pad: '#3d5636', padL: '#b49a52', flower: '#f39a7e', light: '#ffcf86', haze: '#e9b98a', p: [.16, .95, 1.08, 1.02], q: [.6, 1.12, 0, 0] },
+  { name: 'Heure bleue', hour: '20:35', skyA: '#7a88ad', skyB: '#a19dc2', water: '#2d3d58', pad: '#2c4045', padL: '#64788a', flower: '#c9a6cb', light: '#cbd6ff', haze: '#7f88ab', p: [.30, .38, .96, .92], q: [.72, .9, 0, 0] },
+  { name: 'Reflets de nuit', hour: '23:10', skyA: '#1c2536', skyB: '#26324b', water: '#0e1720', pad: '#1a2925', padL: '#36504a', flower: '#b8b4cc', light: '#efe6c4', haze: '#1e2737', p: [.18, .62, 1.12, .86], q: [.86, .74, 0, 0] },
+];
+ATMOS.forEach((a) => ['skyA', 'skyB', 'water', 'pad', 'padL', 'flower', 'light', 'haze'].forEach((k) => (a[k + 'V'] = hex(a[k]))));
+
+function sampleAtmos(t) {
+  t = clamp(t, 0, ATMOS.length - 1);
+  const i = Math.min(Math.floor(t), ATMOS.length - 2), f = smooth(t - i);
+  const A = ATMOS[i], B = ATMOS[i + 1], o = {};
+  ['skyA', 'skyB', 'water', 'pad', 'padL', 'flower', 'light', 'haze'].forEach((k) => (o[k] = mix3(A[k + 'V'], B[k + 'V'], f)));
+  o.p = A.p.map((v, j) => lerp(v, B.p[j], f));
+  o.q = A.q.map((v, j) => lerp(v, B.q[j], f));
+  return o;
+}
+
+const VERT = `attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}`;
+const FRAG = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime; uniform vec2 uLightPos; uniform float uMist;
+uniform vec3 uEnter; uniform vec4 uRip[6]; uniform float uScroll; uniform float uDetail;
+uniform vec3 uSkyA,uSkyB,uWater,uPad,uPadL,uFlower,uLight,uHaze;
+uniform vec4 uP; /* haze, glint, contrast, exposure */
+uniform vec4 uQ; /* willow darkness, saturation */
+
+float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+vec2 h22(vec2 p){float n=h21(p);return vec2(n,h21(p+n+17.1));}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<4;i++){v+=a*vn(p);p=m*p;a*=.5;}return v;}
+vec3 sat(vec3 c,float s){float l=dot(c,vec3(.2126,.7152,.0722));return mix(vec3(l),c,s);}
+
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes; float asp=uRes.x/uRes.y; float t=uTime;
+  /* entrance: the camera sinks through the surface */
+  float ent=uEnter.z; vec2 ec=uEnter.xy;
+  float zoom=uMist*.22*(1.-ent);
+  uv=ec+(uv-ec)/(1.+zoom);
+
+  /* painterly dab field: short anisotropic offsets, like broken brushwork */
+  float ang=(fbm(uv*1.1+3.1)-.5)*2.4;
+  mat2 R=mat2(cos(ang),-sin(ang),sin(ang),cos(ang));
+  vec2 dabc=R*(uv*vec2(asp,1.))*vec2(150.,46.)*uDetail;
+  float dab=vn(dabc)*.65+vn(dabc*1.9+7.)*.35;
+  vec2 puv=uv+(R*vec2(dab-.5,vn(dabc+31.)-.5))*vec2(.004,.002);
+
+  /* ripples from touch */
+  vec2 disp=vec2(0.); float ringL=0.;
+  for(int i=0;i<6;i++){
+    vec4 r=uRip[i]; float age=t-r.z; if(r.w<=0.||age<0.||age>6.)continue;
+    vec2 d=(puv-r.xy)*vec2(asp,1.); float dl=length(d)+1e-4; float rad=age*.16;
+    float w=sin((dl-rad)*70.)*exp(-abs(dl-rad)*16.)*exp(-age*.75)*r.w;
+    disp+=d/dl*w*.010; ringL+=max(w,0.)*.35;
+  }
+
+  /* perspective plane: features shrink toward the top of the frame */
+  float y=puv.y; float z=1.+y*1.5;
+  vec2 w=vec2((puv.x-.5)*asp*z, y*2.1+y*y*1.1 + uScroll*.6);
+  w*=max(1.,1./asp); /* portrait screens keep the pads at a natural size */
+  w+=vec2(t*.006,-t*.004);
+  vec2 wav=vec2(fbm(w*2.6+vec2(t*.05,0.)),fbm(w*2.6+vec2(5.2,-t*.045)))-.5;
+  vec2 ruv=puv+wav*.035/(z)+disp;
+
+  /* reflected sky + clouds */
+  vec3 col=mix(uSkyB,uSkyA,smoothstep(-.1,1.1,ruv.y));
+  float cl=fbm(vec2(ruv.x*asp*1.4,ruv.y*3.)+vec2(t*.008,0.));
+  col=mix(col,uLight,smoothstep(.5,.85,cl)*.25);
+  /* reflected willows: long dark strands hanging from the top */
+  float st=fbm(vec2(ruv.x*asp*13.,ruv.y*1.1+t*.01))*.7+vn(vec2(ruv.x*asp*41.,ruv.y*2.))*.3;
+  float band=fbm(vec2(ruv.x*asp*1.2+4.,1.3));
+  float wm=smoothstep(.4,.64,st)*smoothstep(.4,.58,band)*smoothstep(-.1,.85,ruv.y);
+  vec3 wcol=mix(uPad*.45,uWater*.5,.4);
+  col=mix(col,wcol,wm*uQ.x*.85);
+  /* deep water patches: broken greens and blues beneath the reflection */
+  float deep=fbm(w*.9+vec2(2.,t*.01));
+  col=mix(col,uWater,.42+.3*smoothstep(.35,.7,deep));
+  col=mix(col,mix(uWater,uPad,.5)*.8,.18*smoothstep(.55,.8,deep));
+
+  /* sun or moon reflection, steered by the pointer */
+  vec2 lp=(ruv-uLightPos)*vec2(asp*1.3,.55);
+  float sun=exp(-dot(lp,lp)*28.);
+  float brk=smoothstep(.35,.75,vn(vec2(ruv.x*asp*24.,ruv.y*90.)+t*.6));
+  col+=uLight*sun*(.35+.65*brk)*.75;
+
+  /* glints */
+  float gl=smoothstep(.86,.98,vn(w*vec2(28.,64.)+wav*8.+t*.35));
+  float gm=exp(-length((puv-uLightPos)*vec2(asp,1.))*2.2);
+  col+=uLight*gl*gm*uP.y*.9;
+
+  /* lily pads */
+  vec2 pw=(w+wav*.06)*vec2(1.15,1.75);
+  vec2 cell=floor(pw); vec2 fr=fract(pw);
+  float pad=0.,shad=0.,flw=0.,core=0.,padTone=0.,rim=0.;
+  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){
+    vec2 c=cell+vec2(i,j); vec2 rr=h22(c);
+    float clus=fbm(c*vec2(.2,.42)+7.);
+    float pres=smoothstep(.44,.66,clus);
+    if(rr.x>pres*1.05)continue;
+    vec2 o=vec2(i,j)+.2+.6*h22(c+3.)-fr;
+    float sz=.09+.17*rr.y+.08*pres;
+    vec2 e=o*vec2(1.,1.85);
+    float d=length(e)+(vn(e*16.+c*3.)-.5)*.025;
+    float an=atan(e.y,e.x)+rr.x*6.28;
+    float notch=smoothstep(.12,.0,abs(sin(an*.5)))*step(cos(an),0.);
+    float m=smoothstep(sz,sz-.03,d)*(1.-notch*.9);
+    shad=max(shad,smoothstep(sz+.12,sz,length(e+vec2(.03,-.04)))*.6);
+    if(m>pad){pad=m;padTone=h21(c+9.)+.9*(e.x-e.y)/sz*.35+.25*vn(e*30.);rim=smoothstep(sz-.05,sz-.015,d)*m;}
+    if(rr.y>.72){
+      vec2 fo=e-vec2(.05,.02)*rr.x;
+      float fa=atan(fo.y,fo.x); float fl=length(fo);
+      float petals=.07+.04*abs(cos(fa*3.5+rr.x*6.));
+      flw=max(flw,smoothstep(petals,petals-.02,fl)*m);
+      core=max(core,smoothstep(.022,.0,fl)*m);
+    }
+  }
+  col=mix(col,col*.55,shad*.55);
+  vec3 pc=mix(uPad,uPadL,clamp(padTone*.55+dab*.3,0.,1.));
+  pc=mix(pc,col,.18+.25*smoothstep(.3,1.,uv.y));
+  pc=mix(pc,uLight,gm*.18);
+  pc=mix(pc,uLight*.9+uPadL*.2,rim*.35);
+  col=mix(col,pc,pad);
+  col=mix(col,uFlower*(.85+.3*dab),flw);
+  col=mix(col,mix(uLight,vec3(1.,.9,.6),.4),core*.8);
+
+  col+=ringL*uLight*.6;
+
+  /* haze, thicker toward the far bank */
+  float hz=uP.x*(.35+.65*smoothstep(-.2,1.,uv.y))*(.75+.5*fbm(uv*3.+t*.02));
+  col=mix(col,uHaze,clamp(hz,0.,1.));
+
+  /* grade: each dab leans a little toward a neighbouring hue */
+  float d2=vn(dabc*.7+11.);
+  col+=(uFlower-col)*.08*smoothstep(.62,.8,d2)+(uSkyB-col)*.07*smoothstep(.38,.2,d2);
+  col*=1.+(dab-.5)*.09;
+  col=(col-.5)*uP.z+.5;
+  col*=uP.w;
+  col=sat(col,uQ.y);
+
+  /* intro mist, parted from the point where the visitor enters */
+  float mist=uMist*(.82+.18*fbm(uv*vec2(asp,1.)*2.+t*.03));
+  float d0=length((uv-ec)*vec2(asp,1.));
+  float rad=ent*2.2;
+  mist*=mix(1.,smoothstep(rad-.45,rad,d0),step(.001,ent));
+  col=mix(col,vec3(.93,.93,.9),clamp(mist,0.,1.));
+
+  /* vignette + canvas tooth */
+  vec2 vv=uv-.5; col*=1.-dot(vv,vv)*.55;
+  col+=(h21(gl_FragCoord.xy+fract(t))-.5)*.025;
+  gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+
+const Pond = (() => {
+  const canvas = $('#pond-canvas');
+  const fallback = $('#pond-fallback');
+  let gl = null, prog = null, U = {}, ok = false;
+  let scale = 0.7, raf = 0, running = false, visible = true;
+  let t0 = performance.now(), simTime = 0, last = performance.now();
+  const ripples = new Float32Array(24); let ripIdx = 0;
+  let atmosT = 0, atmosTarget = 0;
+  let mist = 1, enter = { x: .5, y: .5, p: 0 };
+  let light = { x: .68, y: .62 }, lightTarget = { x: .68, y: .62 }, pointerActive = 0;
+  let scroll = 0;
+  const frameTimes = [];
+
+  function init() {
+    try {
+      gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'low-power', preserveDrawingBuffer: false });
+    } catch (e) { gl = null; }
+    if (!gl) return useFallback();
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); } return s; };
+    try {
+      prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, VERT));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    } catch (e) { console.warn('Shader du bassin indisponible : image fixe.'); return useFallback(); }
+    gl.useProgram(prog);
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+    ['uRes', 'uTime', 'uLightPos', 'uMist', 'uEnter', 'uRip', 'uScroll', 'uDetail', 'uSkyA', 'uSkyB', 'uWater', 'uPad', 'uPadL', 'uFlower', 'uLight', 'uHaze', 'uP', 'uQ']
+      .forEach((n) => (U[n] = gl.getUniformLocation(prog, n)));
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); ok = false; useFallback(); });
+    ok = true;
+    scale = state.coarse ? .5 : .7;
+    resize(); addEventListener('resize', resize);
+    document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+    start();
+  }
+
+  function useFallback() {
+    ok = false; canvas.hidden = true; fallback.hidden = false; applyFallback();
+  }
+  function applyFallback() {
+    const a = sampleAtmos(atmosT);
+    fallback.style.setProperty('--fb-sky', toHex(a.skyB));
+    fallback.style.setProperty('--fb-water', toHex(a.water));
+    fallback.style.setProperty('--fb-pad', toHex(a.pad));
+    fallback.style.setProperty('--fb-light', toHex(a.light));
+  }
+
+  function resize() {
+    if (!ok) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const cap = 1500 / Math.max(innerWidth, innerHeight);
+    const s = Math.min(scale * dpr, cap * dpr, 1.25);
+    canvas.width = Math.max(2, Math.round(innerWidth * s));
+    canvas.height = Math.max(2, Math.round(innerHeight * s));
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    draw(performance.now()); // repaint at once so a resize never flashes an empty frame
+  }
+
+  function start() { if (!ok || running || !visible || document.hidden) return; running = true; last = performance.now(); raf = requestAnimationFrame(loop); }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+
+  function loop(now) {
+    if (!running) return;
+    draw(now);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function draw(now) {
+    const dt = Math.min(.1, (now - last) / 1000); last = now;
+    const speed = state.still ? .18 : 1;
+    simTime += dt * speed;
+    // ease atmosphere and light
+    atmosT += (atmosTarget - atmosT) * (1 - Math.exp(-dt * 2.2));
+    const idle = { x: .62 + Math.sin(simTime * .05) * .18, y: .6 + Math.sin(simTime * .037 + 1) * .12 };
+    pointerActive = Math.max(0, pointerActive - dt * .15);
+    const tgt = state.quiet ? idle : { x: lerp(idle.x, lightTarget.x, pointerActive), y: lerp(idle.y, lightTarget.y, pointerActive) };
+    const k = 1 - Math.exp(-dt * 1.6);
+    light.x += (tgt.x - light.x) * k; light.y += (tgt.y - light.y) * k;
+
+    if (!ok) return;
+    const a = sampleAtmos(atmosT);
+    gl.uniform2f(U.uRes, canvas.width, canvas.height);
+    gl.uniform1f(U.uTime, simTime);
+    gl.uniform2f(U.uLightPos, light.x, light.y);
+    gl.uniform1f(U.uMist, mist);
+    gl.uniform3f(U.uEnter, enter.x, enter.y, enter.p);
+    gl.uniform4fv(U.uRip, ripples);
+    gl.uniform1f(U.uScroll, scroll);
+    gl.uniform1f(U.uDetail, Math.max(.6, canvas.width / innerWidth));
+    ['skyA', 'skyB', 'water', 'pad', 'padL', 'flower', 'light', 'haze'].forEach((n) => gl.uniform3fv(U['u' + n[0].toUpperCase() + n.slice(1)], a[n]));
+    gl.uniform4fv(U.uP, a.p); gl.uniform4fv(U.uQ, a.q);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // adaptive resolution: if frames are slow, render fewer pixels
+    frameTimes.push(dt); if (frameTimes.length > 50) {
+      const avg = frameTimes.reduce((x, y) => x + y, 0) / frameTimes.length; frameTimes.length = 0;
+      if (avg > .026 && scale > .38) { scale *= .82; resize(); }
+    }
+  }
+
+  return {
+    init,
+    get ok() { return ok; },
+    setVisible(v) { visible = v; v ? start() : stop(); },
+    setAtmos(t, instant) { atmosTarget = t; if (instant) atmosT = t; if (!ok) applyFallback(); },
+    get atmos() { return atmosTarget; },
+    pointer(x, y) { lightTarget.x = x; lightTarget.y = y; pointerActive = Math.min(1, pointerActive + .08); },
+    ripple(x, y, s = 1) { const i = (ripIdx++ % 6) * 4; ripples[i] = x; ripples[i + 1] = y; ripples[i + 2] = simTime; ripples[i + 3] = s; },
+    setScroll(v) { scroll = v; },
+    setMist(v) { mist = v; },
+    animateEnter(x, y, dur, done) {
+      enter.x = x; enter.y = y; const s = performance.now();
+      const step = (n) => {
+        const p = clamp((n - s) / dur, 0, 1); enter.p = 1 - Math.pow(1 - p, 3);
+        if (p < 1) requestAnimationFrame(step); else { mist = 0; enter.p = 0; done && done(); }
+      };
+      requestAnimationFrame(step);
+    },
+    reveil(dur) {
+      const s = performance.now(); enter.p = 0;
+      const step = (n) => { const p = clamp((n - s) / dur, 0, 1); mist = smooth(p); if (p < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    },
+    sample: sampleAtmos,
+  };
+})();
+
+/* ---------- Sound: synthesised water and air, only after the visitor asks for it ---------- */
+const Sound = (() => {
+  let ctx = null, master = null, waterGain = null, padGain = null, lp = null, pads = [], on = false;
+  const SCALE = [392, 440, 523.25, 587.33, 659.25, 783.99]; // pentatonic around G4
+
+  function build() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+    // water: brown noise through a moving low-pass filter
+    const len = ctx.sampleRate * 4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + .02 * w) / 1.02; d[i] = last * 3.2; }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = .6;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = .07; const lfoG = ctx.createGain(); lfoG.gain.value = 180; lfo.connect(lfoG).connect(lp.frequency); lfo.start();
+    waterGain = ctx.createGain(); waterGain.gain.value = .55;
+    src.connect(lp).connect(waterGain).connect(master); src.start();
+    // air: two soft partials a fifth apart
+    padGain = ctx.createGain(); padGain.gain.value = .045; const pf = ctx.createBiquadFilter(); pf.type = 'lowpass'; pf.frequency.value = 900;
+    padGain.connect(pf).connect(master);
+    [196, 293.66].forEach((f) => { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.connect(padGain); o.start(); pads.push(o); });
+    return true;
+  }
+
+  function set(v) {
+    if (v && !ctx && !build()) return false;
+    on = v;
+    if (!ctx) return false;
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setTargetAtTime(v ? .5 : 0, now, v ? 1.2 : .25);
+    return true;
+  }
+
+  function drop(x) {
+    if (!on || !ctx) return;
+    const f = SCALE[Math.min(SCALE.length - 1, Math.floor(clamp(x, 0, .999) * SCALE.length))];
+    const o = ctx.createOscillator(), g = ctx.createGain(), n = ctx.currentTime;
+    o.type = 'sine'; o.frequency.setValueAtTime(f * 1.5, n); o.frequency.exponentialRampToValueAtTime(f, n + .08);
+    g.gain.setValueAtTime(0, n); g.gain.linearRampToValueAtTime(.12, n + .01); g.gain.exponentialRampToValueAtTime(.0001, n + 1.6);
+    o.connect(g).connect(master); o.start(n); o.stop(n + 1.7);
+  }
+
+  /* chapter changes retune the air and open or close the water */
+  function chapter(name, atmos) {
+    if (!on || !ctx) return;
+    const n = ctx.currentTime;
+    const open = { pond: 1, lab: 1, water: .8, atmosphere: .25, impression: .15, colophon: .1 }[name] ?? .5;
+    waterGain.gain.setTargetAtTime(.55 * open, n, 1.5);
+    const shift = atmos != null ? [1, 1.0595, 1.122, .944, .891][Math.round(clamp(atmos, 0, 4))] : 1;
+    pads.forEach((o, i) => o.frequency.setTargetAtTime([196, 293.66][i] * shift, n, 2));
+    padGain.gain.setTargetAtTime(name === 'impression' ? .03 : .045, n, 1);
+  }
+
+  return { set, drop, chapter, get on() { return on; } };
+})();
+
+/* ---------- The Light Lab ---------- */
+const Lab = (() => {
+  const range = $('#lab-range'), out = $('#lab-name'), meta = $('#lab-meta'), stops = $('#lab-stops'), note = $('#lab-note');
+  let anim = 0;
+
+  function localHourIndex() {
+    const h = new Date().getHours() + new Date().getMinutes() / 60;
+    if (h >= 5 && h < 9.5) return 0;
+    if (h >= 9.5 && h < 16.5) return 1;
+    if (h >= 16.5 && h < 19.8) return 2;
+    if (h >= 19.8 && h < 21.8) return 3;
+    return 4;
+  }
+
+  function render(t) {
+    const i = Math.round(t);
+    const a = Pond.sample(t);
+    out.textContent = ATMOS[i].name;
+    meta.textContent = `Brume ${Math.round(a.p[0] * 100)} % · Éclat ${Math.round(a.p[1] * 100)} % · Contraste ${a.p[2].toFixed(2).replace('.', ',')}`;
+    $$('button', stops).forEach((b, j) => b.setAttribute('aria-pressed', String(j === i)));
+    range.style.setProperty('--knob', toHex(a.light));
+    range.setAttribute('aria-valuetext', ATMOS[i].name);
+    document.documentElement.style.setProperty('--sun', toHex(mix3(hex('#e8c78b'), a.light, .3)));
+  }
+
+  function set(t, fromRange) {
+    Pond.setAtmos(t);
+    if (!fromRange) range.value = Math.round(t * 100);
+    render(t);
+    Sound.chapter(state.chapter, t);
+  }
+
+  function go(target) {
+    cancelAnimationFrame(anim);
+    const from = range.value / 100, s = performance.now(), dur = state.still ? 1 : 1400;
+    const step = (n) => {
+      const p = clamp((n - s) / dur, 0, 1), v = lerp(from, target, smooth(p));
+      range.value = Math.round(v * 100); set(v, true);
+      if (p < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  }
+
+  function init() {
+    ATMOS.forEach((a, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = a.name; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => go(i));
+      stops.appendChild(b);
+    });
+    range.addEventListener('input', () => { cancelAnimationFrame(anim); set(range.value / 100, true); });
+    const i = localHourIndex();
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    note.textContent = `Il est ${hh.replace(':', ' h ')} chez vous : le bassin s’ouvre sur l’atmosphère « ${ATMOS[i].name.toLowerCase()} ». Ce sont des interprétations contemporaines de la lumière changeante, pas des reconstitutions des conditions dans lesquelles Monet a peint.`;
+    return i;
+  }
+
+  return { init, set, go };
+})();
+
+/* ---------- World I: paintings set on the water ---------- */
+const WaterWorld = (() => {
+  const SHAPES = [
+    ['3% 7% 4% 9% / 6% 3% 8% 4%', '6% 3% 8% 4% / 3% 7% 4% 9%'],
+    ['50% 50% 6% 8% / 22% 22% 5% 6%', '46% 54% 8% 5% / 20% 24% 6% 4%'],
+    ['7% 4% 10% 3% / 4% 8% 3% 9%', '4% 8% 5% 7% / 8% 4% 9% 3%'],
+    ['2% 12% 3% 8% / 4% 14% 3% 10%', '9% 4% 10% 3% / 12% 5% 9% 4%'],
+    ['50% 50% 50% 50% / 50% 50% 50% 50%', '47% 53% 52% 48% / 52% 46% 54% 48%'],
+  ];
+  function init() {
+    const host = $('#lilies');
+    WORKS.filter((w) => w.world === 'water').forEach((w, i) => {
+      const fig = document.createElement('figure');
+      fig.className = 'lily'; fig.style.margin = '0';
+      const frame = document.createElement('div'); frame.className = 'frame';
+      frame.style.setProperty('--ar', `${w.w} / ${w.h}`);
+      const sh = SHAPES[i % SHAPES.length];
+      frame.style.setProperty('--shape', sh[0]); frame.style.setProperty('--shape2', sh[1]);
+      frame.style.animationDelay = `${-i * 5}s`;
+      frame.appendChild(workImage(w, 843));
+      const refl = document.createElement('div'); refl.className = 'reflection'; refl.setAttribute('aria-hidden', 'true');
+      const rImg = workImage(w, 400); rImg.alt = ''; refl.appendChild(rImg);
+      const cap = document.createElement('figcaption');
+      cap.innerHTML = `<span class="label d">${String(i + 1).padStart(2, '0')} · ${w.date}</span><span class="t"></span>`;
+      $('.t', cap).textContent = w.title;
+      const btn = document.createElement('button'); btn.className = 'open'; btn.type = 'button';
+      btn.setAttribute('aria-label', `Voir ${w.title}, ${w.date}`);
+      btn.addEventListener('click', () => Viewer.open(w, frame));
+      fig.append(frame, refl, cap, btn);
+      host.appendChild(fig);
+    });
+  }
+  return { init };
+})();
+
+/* ---------- Interlude: the path, 1867–1891 ---------- */
+const Path = (() => {
+  const track = $('#path'), years = $('#years');
+  const K = [1, .78, 1.12, .9, .72, 1.05, .86, 1, .8]; // heights vary like stones on a path
+  let items = [], cur = 0, raf = 0;
+  const list = () => WORKS.filter((w) => w.world === 'chemin');
+
+  function go(i) {
+    i = clamp(i, 0, items.length - 1);
+    const it = items[i];
+    track.scrollTo({ left: it.offsetLeft - (track.clientWidth - it.offsetWidth) / 2, behavior: state.still ? 'auto' : 'smooth' });
+  }
+  function update() {
+    const mid = track.scrollLeft + track.clientWidth / 2;
+    let best = 0, d = Infinity;
+    items.forEach((it, i) => { const c = it.offsetLeft + it.offsetWidth / 2; if (Math.abs(c - mid) < d) { d = Math.abs(c - mid); best = i; } });
+    if (track.scrollLeft < 8) best = 0;
+    if (track.scrollLeft > track.scrollWidth - track.clientWidth - 8) best = items.length - 1;
+    cur = best;
+    $$('button', years).forEach((b, i) => b.setAttribute('aria-current', String(i === cur)));
+    items.forEach((it, i) => it.classList.toggle('near', i === cur));
+    $('#path-prev').disabled = cur === 0; $('#path-next').disabled = cur === items.length - 1;
+  }
+
+  function init() {
+    const L = list(); const y0 = 1867, y1 = 1891;
+    L.forEach((w, i) => {
+      const li = document.createElement('li'); li.className = 'stop'; li.style.setProperty('--k', K[i % K.length]);
+      const head = document.createElement('div'); head.className = 'stop-head';
+      head.innerHTML = '<span class="yr"></span><span class="pl label"></span>';
+      $('.yr', head).textContent = w.date; $('.pl', head).textContent = w.place;
+      const frame = document.createElement('div'); frame.className = 'frame'; frame.style.setProperty('--ar', `${w.w} / ${w.h}`);
+      frame.appendChild(workImage(w, 843, { lazy: false }));
+      const t = document.createElement('span'); t.className = 'stop-title'; t.textContent = w.title;
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'open';
+      btn.setAttribute('aria-label', `Voir ${w.title}, ${w.date}`);
+      btn.addEventListener('click', () => Viewer.open(w, frame));
+      li.append(head, frame, t, btn); track.appendChild(li); items.push(li);
+
+      const b = document.createElement('button'); b.type = 'button';
+      const yr = parseInt(w.date, 10);
+      b.style.left = ((yr - y0) / (y1 - y0) * 100) + '%';
+      b.innerHTML = '<i></i><span></span>'; $('span', b).textContent = yr;
+      b.setAttribute('aria-label', `${w.date} · ${w.place}`);
+      b.addEventListener('click', () => go(i));
+      years.appendChild(b);
+    });
+    track.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(update); }, { passive: true });
+    track.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(cur + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
+    });
+    $('#path-prev').addEventListener('click', () => go(cur - 1));
+    $('#path-next').addEventListener('click', () => go(cur + 1));
+    addEventListener('resize', update);
+    update();
+  }
+  return { init };
+})();
+
+/* ---------- World II: the series comparison ---------- */
+const Atmosphere = (() => {
+  let series = 'stacks', pick = [], drift = 0, driftOn = false, splitAnim = 0;
+  const stage = $('#stage'), A = $('#layer-a'), B = $('#layer-b'), split = $('#split');
+
+  const list = () => WORKS.filter((w) => w.series === series);
+  const avg = (w) => {
+    const src = (w.grid || w.pal).map(hex);
+    const s = src.reduce((a, c) => [a[0] + c[0], a[1] + c[1], a[2] + c[2]], [0, 0, 0]).map((v) => v / src.length);
+    return s;
+  };
+
+  function chipCanvas(w) {
+    const c = document.createElement('canvas'); c.width = 160; c.height = 54;
+    const x = c.getContext('2d');
+    if (w.grid) {
+      const g = document.createElement('canvas'); g.width = w.gw; g.height = w.gh; const gx = g.getContext('2d'); const im = gx.createImageData(w.gw, w.gh);
+      w.grid.forEach((h, i) => { const v = hex(h); im.data.set([v[0] * 255, v[1] * 255, v[2] * 255, 255], i * 4); });
+      gx.putImageData(im, 0, 0); x.imageSmoothingEnabled = true; x.drawImage(g, 0, 0, 160, 54);
+    } else {
+      const n = w.pal.length; w.pal.forEach((h, i) => { x.fillStyle = '#' + h; x.fillRect(i * 160 / n, 0, 160 / n + 1, 54); });
+    }
+    c.setAttribute('aria-hidden', 'true');
+    return c;
+  }
+
+  function caption(el, w, role) {
+    el.innerHTML = `<span class="k label">${role}</span><span class="t"></span><span class="d"></span><button class="textbtn" type="button">Voir la toile entière</button>`;
+    $('.t', el).textContent = w.title; $('.d', el).textContent = `${w.date} · ${w.dims.replace(/\./g, ',')}`;
+    $('button', el).addEventListener('click', (e) => Viewer.open(w, role === 'A' ? A : B, e.currentTarget));
+  }
+
+  function fill(layer, w) {
+    layer.innerHTML = ''; layer.appendChild(workImage(w, 1686, { lazy: false }));
+  }
+
+  function difference(a, b) {
+    const ca = avg(a), cb = avg(b);
+    const dl = lum(cb) - lum(ca); const dt = (cb[0] - cb[2]) - (ca[0] - ca[2]);
+    const pct = Math.round(Math.abs(dl) / Math.max(lum(ca), .05) * 100);
+    const light = Math.abs(dl) < .02 ? 'à peu près aussi lumineux que' : dl > 0 ? `${pct} % plus lumineux que` : `${pct} % plus sombre que`;
+    const temp = Math.abs(dt) < .015 ? 'avec la même température de couleur' : dt > 0 ? 'et plus chaud' : 'et plus froid';
+    $('#diff-text').textContent = `En moyenne, B est ${light} A, ${temp}.`;
+    const bars = $('#bars'); bars.innerHTML = '';
+    [a, b].forEach((w, i) => {
+      const r = document.createElement('div'); r.className = 'bar'; r.setAttribute('aria-hidden', 'true');
+      const step = Math.max(1, Math.floor(w.pal.length / 12));
+      w.pal.filter((_, j) => j % step === 0).forEach((h) => { const s = document.createElement('i'); s.style.background = '#' + h; r.appendChild(s); });
+      bars.appendChild(r);
+    });
+  }
+
+  function apply() {
+    const L = list(); const [a, b] = pick.map((id) => L.find((w) => w.id === id));
+    fill(A, a); fill(B, b); caption($('#cap-a'), a, 'A'); caption($('#cap-b'), b, 'B'); difference(a, b);
+    $$('.chip').forEach((c) => { const id = +c.dataset.id; const r = id === pick[0] ? 'A' : id === pick[1] ? 'B' : ''; r ? c.setAttribute('data-role', r) : c.removeAttribute('data-role'); $('.role', c).textContent = r ? 'Affiché en ' + r : ''; c.setAttribute('aria-pressed', String(!!r)); });
+  }
+
+  function choose(id) {
+    if (pick.includes(id)) return;
+    pick = [pick[1], id]; apply(); sweep();
+  }
+
+  /* a short sweep of the seam so the change is visible */
+  function sweep() {
+    if (state.still) return;
+    cancelAnimationFrame(splitAnim);
+    const from = 18, to = 50, s = performance.now();
+    const step = (n) => { const p = clamp((n - s) / 1100, 0, 1); setSplit(lerp(from, to, smooth(p))); if (p < 1) splitAnim = requestAnimationFrame(step); };
+    splitAnim = requestAnimationFrame(step);
+  }
+  function setSplit(v) { split.value = v; stage.style.setProperty('--split', v + '%'); }
+
+  function setSeries(s) {
+    series = s; const L = list(); pick = [L[0].id, L[L.length > 3 ? 3 : 1].id];
+    if (s === 'thames') pick = [L[0].id, L[1].id];
+    $$('#series-tabs [role=tab]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.series === s)));
+    $('#compare').setAttribute('aria-labelledby', 'tab-' + s);
+    const sp = $('#spectrum'); sp.innerHTML = '';
+    L.forEach((w) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.id = w.id;
+      b.appendChild(chipCanvas(w));
+      const t = document.createElement('span'); t.className = 't'; t.textContent = w.title.replace(/^Meules? /, '').replace(/[()]/g, '').replace(/^./, (c) => c.toUpperCase()) || w.title;
+      const r = document.createElement('span'); r.className = 'role';
+      b.append(t, r);
+      b.setAttribute('aria-label', `${w.title}, ${w.date}`);
+      b.addEventListener('click', () => choose(w.id));
+      sp.appendChild(b);
+    });
+    apply();
+  }
+
+  function toggleDrift(v) {
+    driftOn = v ?? !driftOn;
+    $('#btn-drift').setAttribute('aria-pressed', String(driftOn));
+    $('#btn-drift').textContent = driftOn ? 'Garder cette heure' : 'Laisser passer les heures';
+    clearInterval(drift);
+    if (driftOn) {
+      const tick = () => {
+        const L = list();
+        if (L.length === 2) { pick = [pick[1], pick[0]]; apply(); sweep(); return; } const i = L.findIndex((w) => w.id === pick[1]);
+        choose(L[(i + 1) % L.length].id === pick[0] ? L[(i + 2) % L.length].id : L[(i + 1) % L.length].id);
+      };
+      drift = setInterval(tick, state.still ? 6000 : 4200);
+    }
+  }
+
+  function init() {
+    split.addEventListener('input', () => { cancelAnimationFrame(splitAnim); setSplit(+split.value); });
+    $$('#series-tabs [role=tab]').forEach((t) => {
+      t.addEventListener('click', () => setSeries(t.dataset.series));
+      t.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const o = $$('#series-tabs [role=tab]').find((x) => x !== t); o.focus(); o.click(); }
+      });
+    });
+    $('#btn-drift').addEventListener('click', () => toggleDrift());
+    setSeries('stacks'); setSplit(50);
+  }
+  return { init, stopDrift: () => driftOn && toggleDrift(false) };
+})();
+
+/* ---------- World III: the painting instrument ---------- */
+const Impression = (() => {
+  const cv = $('#impression-canvas');
+  let ctx, W = 1200, H = 900, brush = 'dab', light = .55, strokes = 0, auto = 0, painted = false;
+  let pal = [], palName = '';
+  const sets = [];
+
+  function buildSets() {
+    const pick = (id) => WORKS.find((w) => w.id === id);
+    [[16568, 'Nymphéas, 1906'], [14624, 'Meules (fin de journée, automne)'], [81537, 'Bordighera, 1884'], [20701, 'Waterloo Bridge, effet de soleil'], [97933, 'Le Bassin aux nymphéas, 1917–19']].forEach(([id, label]) => {
+      const w = pick(id); sets.push({ label, colours: w.pal.map(hex) });
+    });
+    const a = Pond.sample(2);
+    sets.push({ label: 'Le Laboratoire, heure dorée', colours: [a.water, a.pad, a.padL, a.skyB, a.skyA, a.light, a.flower, a.haze] });
+  }
+
+  function setPal(i) {
+    pal = sets[i].colours; palName = sets[i].label;
+    $$('.pigment').forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)));
+  }
+
+  /* colour for a dab: a coherent field across the canvas, shifted by the light */
+  function colourAt(x, y, r) {
+    const n = (Math.sin(x * 4.1 + y * 2.3) + Math.sin(x * 1.7 - y * 5.2 + 1.3) + 2) / 4;
+    const idx = clamp(Math.floor((n * .7 + r * .3 + (1 - y) * .25 - .1) * pal.length), 0, pal.length - 1);
+    let c = pal[idx];
+    const warm = hex('#ffd59a'), cool = hex('#8a9ccc');
+    const sun = mix3(cool, warm, light);
+    c = mix3(c, sun, .12 + .18 * (1 - y) * Math.abs(light - .5) * 2);
+    if (lum(c) > .55 && light > .6) c = mix3(c, hex('#fff1cf'), .15);
+    return c;
+  }
+
+  function stroke(x, y, dx, dy, pressure = 1) {
+    const r = Math.random();
+    const nx = x / W, ny = y / H;
+    const c = colourAt(nx, ny, r);
+    const ang = Math.atan2(dy, dx) + (Math.random() - .5) * .5;
+    const sp = Math.hypot(dx, dy);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    if (brush === 'glaze') {
+      const rad = 60 + Math.random() * 70;
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rad);
+      g.addColorStop(0, toHex(c) + '2a'); g.addColorStop(1, toHex(c) + '00');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, rad * 1.4, rad, 0, 0, Math.PI * 2); ctx.fill();
+    } else {
+      const len = brush === 'drag' ? clamp(sp * 1.6, 24, 90) : 22 + Math.random() * 30;
+      const wid = (brush === 'drag' ? 12 : 9 + Math.random() * 12) * pressure;
+      // bristles: several thin parallel marks with small colour shifts
+      const bristles = 6;
+      for (let b = 0; b < bristles; b++) {
+        const off = (b / (bristles - 1) - .5) * wid;
+        const j = (Math.random() - .5) * .07;
+        ctx.strokeStyle = toHex(c.map((v) => v + j));
+        ctx.globalAlpha = .38 + Math.random() * .4;
+        ctx.lineWidth = wid / bristles * 1.7 + Math.random() * 1.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-len / 2 + Math.random() * 3, off);
+        ctx.quadraticCurveTo(0, off + (Math.random() - .5) * 3, len / 2 - Math.random() * 3, off + (Math.random() - .5) * 2);
+        ctx.stroke();
+      }
+      // occasional highlight catching the light
+      if (Math.random() < .08 + light * .1) {
+        ctx.globalAlpha = .7; ctx.fillStyle = toHex(mix3(c, hex('#fff6dc'), .55));
+        ctx.beginPath(); ctx.ellipse(0, -wid * .2, len * .25, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+    strokes++; $('#imp-count').textContent = `${strokes.toLocaleString('fr-FR')} touche${strokes > 1 ? 's' : ''}`;
+    painted = true;
+  }
+
+  function ground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    const top = mix3(pal[pal.length - 1] || [.9, .9, .88], [.93, .92, .88], .55);
+    const bot = mix3(pal[Math.floor(pal.length / 3)] || [.6, .65, .6], [.85, .85, .8], .35);
+    g.addColorStop(0, toHex(top)); g.addColorStop(1, toHex(bot));
+    ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    strokes = 0; $('#imp-count').textContent = '0 touche';
+  }
+
+  /* autonomous painting: strokes follow a slowly turning flow field */
+  /* autonomous painting: a fixed number of strokes along mostly horizontal currents,
+     spread over the frames so coverage does not depend on frame rate */
+  function autopaint(ms = 2400, total = 2400) {
+    cancelAnimationFrame(auto);
+    const prev = brush; const start = performance.now(); const seed = Math.random() * 10;
+    let done = 0;
+    const step = (n) => {
+      const p = clamp((n - start) / ms, 0, 1);
+      const want = p >= 1 ? total : Math.round(total * p);
+      const batch = Math.min(want - done, 400);
+      for (let k = 0; k < batch; k++, done++) {
+        const q = done / total;
+        const x = Math.random() * W, y = Math.random() * H;
+        const a = Math.sin(y * .012 + seed) * .35 + Math.sin(x * .004 + y * .002 + seed * 2) * .25;
+        const dx = Math.cos(a) * 12, dy = Math.sin(a) * 12;
+        brush = q < .12 ? 'glaze' : (k % 7 === 0 ? 'drag' : 'dab');
+        stroke(x, y, dx, dy, 1 - q * .55);
+      }
+      if (done < total) auto = requestAnimationFrame(step); else brush = prev;
+    };
+    auto = requestAnimationFrame(step);
+  }
+
+  function init() {
+    cv.width = W; cv.height = H; ctx = cv.getContext('2d');
+    buildSets();
+    const host = $('#pigments');
+    sets.forEach((s, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pigment'; b.setAttribute('aria-pressed', 'false');
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.setAttribute('aria-hidden', 'true');
+      const step = Math.max(1, Math.floor(s.colours.length / 8));
+      s.colours.filter((_, j) => j % step === 0).forEach((c) => { const x = document.createElement('i'); x.style.background = toHex(c); sw.appendChild(x); });
+      const t = document.createElement('span'); t.textContent = s.label;
+      b.append(sw, t); b.addEventListener('click', () => setPal(i));
+      host.appendChild(b);
+    });
+    setPal(1); ground();
+
+    $$('#brushes button').forEach((b) => b.addEventListener('click', () => { brush = b.dataset.brush; $$('#brushes button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }));
+    $('#imp-light').addEventListener('input', (e) => (light = e.target.value / 100));
+    $('#imp-clear').addEventListener('click', () => { cancelAnimationFrame(auto); ground(); });
+    $('#imp-auto').addEventListener('click', () => autopaint());
+    $('#imp-save').addEventListener('click', save);
+
+    let down = false, lx = 0, ly = 0;
+    const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+    cv.addEventListener('pointerdown', (e) => { down = true; cv.setPointerCapture(e.pointerId); [lx, ly] = pos(e); stroke(lx, ly, 1, 0, e.pressure || 1); });
+    cv.addEventListener('pointermove', (e) => {
+      if (!down) return; const [x, y] = pos(e); const dx = x - lx, dy = y - ly; const d = Math.hypot(dx, dy);
+      const spacing = brush === 'glaze' ? 40 : brush === 'drag' ? 10 : 7;
+      if (d < spacing) return;
+      const n = Math.floor(d / spacing);
+      for (let i = 1; i <= n; i++) stroke(lx + dx * i / n, ly + dy * i / n, dx, dy, e.pressure && e.pointerType === 'pen' ? .5 + e.pressure : 1);
+      lx = x; ly = y;
+    });
+    const up = () => (down = false);
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); autopaint(1600, 1200); } });
+    cv.tabIndex = 0;
+  }
+
+  function firstVisit() { if (strokes === 0) autopaint(state.still ? 300 : 2200); }
+
+  function save() {
+    let url;
+    try { url = cv.toDataURL('image/png'); } catch (e) { return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    $('#sheet-img').src = url; $('#sheet-dl').href = url; $('#sheet-dl').download = `impression-${stamp}.png`;
+    Dialogs.open($('#sheet'), $('#imp-save'));
+  }
+
+  return { init, firstVisit };
+})();
+
+/* ---------- Dialog helper: focus trap, Escape, return focus ---------- */
+const Dialogs = (() => {
+  const stack = [];
+  const focusables = (el) => $$('a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])', el).filter((x) => x.offsetParent !== null || x === document.activeElement);
+  function open(el, opener) {
+    el.hidden = false; stack.push({ el, opener: opener || document.activeElement });
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => { const f = focusables(el)[0]; f && f.focus({ preventScroll: true }); });
+  }
+  function close(el) {
+    const i = stack.findIndex((s) => s.el === el); if (i < 0) return;
+    const { opener } = stack.splice(i, 1)[0]; el.hidden = true;
+    if (!stack.length && !document.body.classList.contains('veiled')) document.body.style.overflow = '';
+    opener && opener.isConnected && opener.focus({ preventScroll: true });
+  }
+  document.addEventListener('keydown', (e) => {
+    const top = stack[stack.length - 1]; if (!top) return;
+    if (e.key === 'Escape') { e.preventDefault(); top.el.dispatchEvent(new CustomEvent('dismiss')); }
+    if (e.key === 'Tab') {
+      const f = focusables(top.el); if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+  return { open, close, get top() { return stack[stack.length - 1]?.el; } };
+})();
+
+/* ---------- Single-work viewer ---------- */
+const Viewer = (() => {
+  const el = $('#viewer'); let cur = null, list = [], source = null;
+  const WORLD = { chemin: ['Interlude · Le Chemin', 'Retour au Chemin'], water: ['Monde I · L’Eau', 'Retour à L’Eau'], atmosphere: ['Monde II · L’Atmosphère', 'Retour à L’Atmosphère'] };
+
+  function render(w) {
+    cur = w; list = WORKS.filter((x) => x.world === w.world && (!w.series || x.series === w.series));
+    el.className = 'viewer layout-' + w.layout;
+    const fig = $('#v-figure'); fig.innerHTML = '';
+    const img = workImage(w, 1686, { lazy: false, onStudy: () => {
+      const n = document.createElement('span'); n.className = 'study-note';
+      n.textContent = 'L’image n’a pas pu se charger ici. Voici une étude de couleur construite à partir de l’aperçu de 8 pixels du musée, pas le tableau.';
+      fig.appendChild(n);
+    } });
+    fig.appendChild(img);
+    const idx = list.indexOf(w);
+    $('#v-k').textContent = `${WORLD[w.world][0]} · ${String(idx + 1).padStart(2, '0')} sur ${String(list.length).padStart(2, '0')}`;
+    $('#v-title').textContent = w.title;
+    $('#v-who').textContent = `Claude Monet · ${w.date}`;
+    $('#v-note').textContent = w.note;
+    $('#v-dl').innerHTML = '';
+    [['Titre au musée', w.titleEn], ['Inventaire', w.acc], ['Technique', 'Huile sur toile'], ['Dimensions', w.dims.replace(/\./g, ',')], ['Collection', 'Art Institute of Chicago'], ['Provenance', w.credit]].forEach(([k, v]) => {
+      const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; $('#v-dl').append(dt, dd);
+    });
+    $('#v-src').innerHTML = `Image : domaine public (CC0), via l’API du musée. <a href="${AIC_PAGE(w.id)}" target="_blank" rel="noopener">Voir sur artic.edu</a>`;
+    $('#v-return').textContent = WORLD[w.world][1];
+    el.scrollTop = 0;
+    return img;
+  }
+
+  /* the selected painting grows out of the place it was chosen from */
+  function flip(from, img) {
+    if (!from || state.still || !img.animate) return;
+    const a = from.getBoundingClientRect();
+    const run = () => {
+      const b = img.getBoundingClientRect(); if (!b.width) return;
+      const sx = a.width / b.width, sy = a.height / b.height;
+      img.animate([
+        { transform: `translate(${a.left - b.left}px, ${a.top - b.top}px) scale(${sx}, ${sy})`, transformOrigin: '0 0', borderRadius: '40%', opacity: .9 },
+        { transform: 'none', transformOrigin: '0 0', borderRadius: '0', opacity: 1 },
+      ], { duration: 900, easing: 'cubic-bezier(.22,.61,.2,1)' });
+      $('.v-text', el).animate([{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 350, easing: 'ease-out', fill: 'backwards' });
+    };
+    if (img.complete) run(); else { img.addEventListener('load', run, { once: true }); img.addEventListener('error', () => {}, { once: true }); }
+  }
+
+  function open(w, fromEl, opener) {
+    source = fromEl;
+    const img = render(w);
+    Dialogs.open(el, opener || document.activeElement);
+    el.animate && !state.still && el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 380, easing: 'ease-out' });
+    flip(fromEl, img);
+    Sound.drop(.6);
+  }
+  function close() {
+    if (el.hidden) return;
+    if (el.animate && !state.still) { const a = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260 }); a.onfinish = () => Dialogs.close(el); }
+    else Dialogs.close(el);
+  }
+  function step(d) {
+    const i = list.indexOf(cur); const w = list[(i + d + list.length) % list.length];
+    const img = render(w);
+    !state.still && img.animate && img.animate([{ opacity: 0, transform: `translateX(${d * 30}px)` }, { opacity: 1, transform: 'none' }], { duration: 600, easing: 'cubic-bezier(.22,.61,.2,1)' });
+  }
+
+  $('#v-close').addEventListener('click', close);
+  $('#v-prev').addEventListener('click', () => step(-1));
+  $('#v-next').addEventListener('click', () => step(1));
+  el.addEventListener('dismiss', close);
+  el.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
+  });
+  return { open, close };
+})();
+
+/* ---------- Chapters, navigation, entrance ---------- */
+const CHAPTERS = [
+  { id: 'pond', n: 'Prologue', t: 'La peinture vivante', d: 'Un bassin calculé sous vos yeux.', c: '#a8c8cc', ui: '#f1f0e8', dim: 'rgba(241,240,232,.62)', open: true },
+  { id: 'lab', n: 'Laboratoire', t: 'Le Laboratoire de la lumière', d: 'Cinq atmosphères pour une même surface.', c: '#e8c78b', ui: '#f1f0e8', dim: 'rgba(241,240,232,.62)', open: true },
+  { id: 'chemin', n: 'Interlude', t: 'Le Chemin', d: 'Neuf toiles, de Sainte-Adresse à Giverny.', c: '#c9a26b', ui: '#202720', dim: 'rgba(32,39,32,.6)', open: false },
+  { id: 'water', n: 'Monde I', t: 'L’Eau', d: 'Cinq toiles du jardin d’eau.', c: '#5f8a6a', ui: '#f1f0e8', dim: 'rgba(241,240,232,.62)', open: true },
+  { id: 'atmosphere', n: 'Monde II', t: 'L’Atmosphère', d: 'Un motif au fil des heures.', c: '#c5c0d6', ui: '#202720', dim: 'rgba(32,39,32,.6)', open: false },
+  { id: 'impression', n: 'Monde III', t: 'Impression', d: 'Un instrument pour peindre la lumière.', c: '#e3a37c', ui: '#f1f0e8', dim: 'rgba(241,240,232,.62)', open: false },
+  { id: 'colophon', n: 'Sources', t: 'Sources', d: 'D’où viennent les tableaux, et ce qui est inventé.', c: '#f1f0e8', ui: '#f1f0e8', dim: 'rgba(241,240,232,.62)', open: false },
+];
+
+function setStill(v) {
+  state.still = v; document.body.classList.toggle('still', v);
+  $('#btn-still').setAttribute('aria-pressed', String(v));
+  store.set('still', v ? '1' : '0');
+}
+
+function setQuiet(v) {
+  state.quiet = v; document.body.classList.toggle('quiet', v);
+  $('#btn-quiet').setAttribute('aria-pressed', String(v));
+  $('#btn-quiet').textContent = v ? 'Revenir' : 'Contempler';
+  if (v) {
+    // keep one way back visible for keyboard and screen-reader users
+    const back = document.createElement('button');
+    back.id = 'quiet-exit'; back.className = 'textbtn';
+    back.textContent = 'Quitter la contemplation';
+    Object.assign(back.style, { position: 'fixed', zIndex: 35, left: 'max(16px, env(safe-area-inset-left, 0px))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)', color: '#f1f0e8', opacity: .55, marginLeft: '8px' });
+    back.addEventListener('click', () => setQuiet(false));
+    document.body.appendChild(back); back.focus({ preventScroll: true });
+  } else {
+    $('#quiet-exit')?.remove(); $('#btn-quiet').focus({ preventScroll: true });
+  }
+}
+
+function enter(x = .5, y = .5, instant = false) {
+  if (state.entered) return;
+  state.entered = true;
+  const veil = $('#veil');
+  document.body.classList.remove('veiled');
+  document.body.style.overflow = '';
+  const finish = () => { veil.hidden = true; veil.classList.remove('leaving'); document.activeElement?.blur?.(); };
+  if (instant || state.still || !Pond.ok) { Pond.setMist(0); finish(); return; }
+  veil.classList.add('leaving');
+  Pond.ripple(x, y, 1.6);
+  Pond.animateEnter(x, y, 1700, () => {});
+  setTimeout(finish, 1300);
+  Sound.drop(x);
+}
+
+function reveil() {
+  if (!state.entered) return;
+  state.entered = false;
+  scrollTo({ top: 0, behavior: state.still ? 'auto' : 'smooth' });
+  const veil = $('#veil'); veil.hidden = false;
+  // restart the title reveal
+  $$('#veil h1 span, #veil .sub, #veil .line, #veil .veil-actions').forEach((n) => { n.style.animation = 'none'; void n.offsetWidth; n.style.animation = ''; });
+  document.body.classList.add('veiled');
+  Pond.reveil(state.still ? 1 : 1400);
+  setTimeout(() => $('#enter').focus({ preventScroll: true }), 50);
+}
+
+function initChapters() {
+  const tideLinks = $$('#tide a');
+  const setChapter = (id) => {
+    if (state.chapter === id) return; state.chapter = id;
+    const c = CHAPTERS.find((x) => x.id === id);
+    document.documentElement.style.setProperty('--ui', c.ui);
+    document.documentElement.style.setProperty('--ui-dim', c.dim);
+    document.documentElement.style.setProperty('--ui-shadow', c.ui === '#202720' ? 'transparent' : 'rgba(20,30,25,.5)');
+    tideLinks.forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === '#' + id)));
+    $('#loc-n').textContent = c.n; $('#loc-t').textContent = c.t;
+    Sound.chapter(id, Pond.atmos);
+    if (id === 'impression') Impression.firstVisit();
+    try { history.replaceState(null, '', '#' + id); } catch (e) { /* sandboxed */ }
+  };
+  tideLinks[0].setAttribute('aria-current', 'true');
+
+  // the chapter whose band crosses the middle of the screen is current
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) setChapter(e.target.id); });
+  }, { rootMargin: '-50% 0px -50% 0px' });
+  CHAPTERS.forEach((c) => io.observe(document.getElementById(c.id)));
+
+  // pause the pond whenever paper or ink chapters cover the whole screen
+  const openIds = new Set(); const vis = new IntersectionObserver((entries) => {
+    entries.forEach((e) => (e.isIntersecting ? openIds.add(e.target.id) : openIds.delete(e.target.id)));
+    Pond.setVisible(openIds.size > 0);
+  });
+  ['pond', 'lab', 'water'].forEach((id) => vis.observe(document.getElementById(id)));
+  // the hours stop passing once the series is entirely off screen
+  new IntersectionObserver((e) => { if (!e[0].isIntersecting) Atmosphere.stopDrift(); }).observe(document.getElementById('atmosphere'));
+
+  // scroll drifts the pond gently, like stepping along its edge
+  let ticking = false;
+  addEventListener('scroll', () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => { ticking = false; Pond.setScroll(state.still ? 0 : scrollY / innerHeight); });
+  }, { passive: true });
+}
+
+function initIndex() {
+  const rooms = $('#rooms'), works = $('#works');
+  CHAPTERS.forEach((c) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<a href="#${c.id}" style="--c:${c.c}"><span class="n"><i></i>${c.n === c.t ? '' : c.n}</span><span class="t"></span><span class="d"></span></a>`;
+    $('.t', li).textContent = c.t; $('.d', li).textContent = c.d;
+    $('a', li).addEventListener('click', (e) => { e.preventDefault(); Dialogs.close($('#index')); go(c.id); });
+    rooms.appendChild(li);
+  });
+  WORKS.forEach((w) => {
+    const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button';
+    b.innerHTML = '<span></span><span></span>'; b.children[0].textContent = w.title; b.children[1].textContent = w.date;
+    b.addEventListener('click', () => { Dialogs.close($('#index')); Viewer.open(w, null, $('#btn-index')); });
+    li.appendChild(b); works.appendChild(li);
+  });
+  $('#btn-index').addEventListener('click', () => {
+    $$('a', rooms).forEach((a) => a.setAttribute('aria-current', String(a.getAttribute('href') === '#' + state.chapter)));
+    Dialogs.open($('#index'));
+  });
+  $('#index-close').addEventListener('click', () => Dialogs.close($('#index')));
+  $('#index').addEventListener('dismiss', () => Dialogs.close($('#index')));
+}
+
+function go(id) {
+  if (!state.entered) enter(.5, .5, true);
+  const el = document.getElementById(id); if (!el) return;
+  el.scrollIntoView({ behavior: state.still ? 'auto' : 'smooth', block: 'start' });
+}
+
+function initPointer() {
+  const onWater = (e) => !state.chapter || ['pond', 'lab'].includes(state.chapter);
+  addEventListener('pointermove', (e) => {
+    if (!state.entered || !onWater(e)) return;
+    Pond.pointer(e.clientX / innerWidth, 1 - e.clientY / innerHeight);
+  }, { passive: true });
+  // touching the water: only on the open pond itself, never on text or controls
+  addEventListener('pointerdown', (e) => {
+    if (!state.entered || !onWater(e)) return;
+    if (e.target.closest('button, a, input, label, .lab-panel, .pond-copy h2, .pond-copy p')) return;
+    const x = e.clientX / innerWidth, y = 1 - e.clientY / innerHeight;
+    Pond.ripple(x, y, 1); Pond.pointer(x, y); Sound.drop(x);
+  });
+}
+
+function boot() {
+  document.documentElement.lang = 'fr';
+  if (state.coarse) $('#pond-hint').textContent = 'Glissez pour guider la lumière. Touchez l’eau.';
+  const storedStill = store.get('still');
+  setStill(storedStill != null ? storedStill === '1' : state.still);
+
+  Pond.init();
+  const hourIdx = Lab.init();
+  Pond.setAtmos(0, true); // intro opens in morning mist
+  Path.init(); WaterWorld.init(); Atmosphere.init(); Impression.init();
+  initChapters(); initIndex(); initPointer();
+
+  // entrance
+  const veil = $('#veil');
+  $('#enter').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    enter((r.left + r.width / 2) / innerWidth, 1 - (r.top + r.height / 2) / innerHeight);
+    setTimeout(() => Lab.go(hourIdx), 900);
+  });
+  $('#skip').addEventListener('click', () => { enter(.5, .5, true); Lab.set(hourIdx); });
+  veil.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    enter(e.clientX / innerWidth, 1 - e.clientY / innerHeight); setTimeout(() => Lab.go(hourIdx), 900);
+  });
+  addEventListener('keydown', (e) => {
+    if (!state.entered && (e.key === 'Escape')) { enter(.5, .5, true); Lab.set(hourIdx); }
+    if (state.quiet && e.key === 'Escape') setQuiet(false);
+  });
+  veil.addEventListener('wheel', () => { enter(.5, .5); setTimeout(() => Lab.go(hourIdx), 900); }, { passive: true });
+
+  $('#to-entrance').addEventListener('click', reveil);
+  $('#btn-still').addEventListener('click', () => setStill(!state.still));
+  $('#btn-sound').addEventListener('click', () => {
+    const v = !Sound.on; const ok = Sound.set(v);
+    $('#btn-sound').setAttribute('aria-pressed', String(v && ok));
+    if (v && ok) Sound.chapter(state.chapter, Pond.atmos);
+  });
+  $('#btn-quiet').addEventListener('click', () => setQuiet(!state.quiet));
+  $('#sheet-close').addEventListener('click', () => Dialogs.close($('#sheet')));
+  // inside the claude.ai viewer, files are offered through its downloads capability
+  let downloads = null;
+  if (window.claude?.use) window.claude.use('downloads').then((d) => (downloads = d)).catch(() => {});
+  $('#sheet-dl').addEventListener('click', async (e) => {
+    if (!downloads) return; // a plain link works when the page is opened directly
+    e.preventDefault();
+    const a = e.currentTarget;
+    try {
+      const blob = await (await fetch(a.href)).blob();
+      await downloads.save({ filename: a.download, data: blob });
+    } catch (err) { /* declined or unavailable: the image can still be saved by hand */ }
+  });
+  $('#sheet').addEventListener('dismiss', () => Dialogs.close($('#sheet')));
+  $$('#tide a').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); go(a.getAttribute('href').slice(1)); }));
+
+  // deep link: skip the veil and go straight to the chapter
+  const h = location.hash.slice(1);
+  if (CHAPTERS.some((c) => c.id === h) && h !== 'pond') {
+    enter(.5, .5, true); Lab.set(hourIdx);
+    requestAnimationFrame(() => document.getElementById(h).scrollIntoView());
+  } else {
+    document.body.classList.add('veiled');
+    $('#enter').focus({ preventScroll: true });
+  }
+}
+
+boot();
+
+})();
+</script>
+
+</body>
+</html>
